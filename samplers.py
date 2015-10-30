@@ -9,23 +9,51 @@ from six import iteritems as diter
 
 class Gibbs(object):
     """
-    A Gibbs Sampler manager
+    A Gibbs Sampler manager.
     """
     def __init__(self, n=100, backend='', statics=globals(), **kwargs):
         self.var_names = [k for k in kwargs.keys()]
-        self.trace = Trace(self.var_names, n, statics=statics)
-        self.samplers = [v(self.trace) for v in kwargs.values()]
-        self.step = 0
-        self.allocated = n
-        self.pos = self.trace.pos
         if backend is not '':
             self.backend = open(backend, 'w')
             self.backend.write(','.join([str(name) for name in self.var_names]))
             self.backend.write('\n')
+            n = 2
         else:
             self.backend = None
+        self.trace = Trace(self.var_names, n, statics=statics)
+        self.samplers = [v(self.trace) for v in kwargs.values()]
+        self.step = 0
+        self._alloc = n
+        self.pos = self.trace.pos
+    
+    def set_start(self, **kwargs):
+        """
+        Pass a dictionary of starting values for the trace.
+
+        Arguments:
+        ============
+        **kwargs : names and starting values for the distributions in the
+                   sampler
+
+        Returns:
+        ========
+        sets values in the trace in place
+        """
+        for k,v in diter(kwargs):
+            self.trace.update(k,v)
 
     def reorder_step(self, order):
+        """
+        Reorder steps in the sampler
+
+        Arguments:
+        ==========
+        order : list of strings containing a new ordering of samplers
+
+        Returns:
+        ========
+        reorders self.var_names in place
+        """
         inn = [x in order for x in self.var_names]
         out = [x not in self.var_names for x in order]
         if not all(inn): #if all order in var_names
@@ -42,46 +70,117 @@ class Gibbs(object):
         self.samplers = new_order
 
     def add_step(self, sampler, name, i=-1):
+        """
+        add a single step to the sampler
+
+        Arguments: 
+        ==========
+        sampler : an instance of class AbstractSampler to use to sample
+        name    : the name of the parameter
+        i       : index at which to insert the sampler (Default: end)
+
+        Returns:
+        =========
+        inserts one step to the sampling list in place
+        """
         self.var_names.insert(name, i)
         self.samplers.insert(sampler, i)
     
     def add_steps(self, *args):
+        """
+        add multiple steps to the sampler
+
+        Arguments:
+        ==========
+        *args : list of alternating sampler instances and names to insert
+
+        Returns:
+        =========
+        appends steps to the sampling list in place. 
+        """
         nsteps = len(args) // 2
         for i in range(nsteps):
             sampler = args[2*i]
             name = args[2*i+1]
+            self.add_step(sampler, name)
 
     def drop_step(self, name=None, i=None):
+        """
+        remove a step from the sampler by name or index
+
+        Arguments:
+        ==========
+        name : name of the variable to remove from the sampler (Default: None)
+        i    : step number to remove from the sampler (Default: None)
+
+        Returns:
+        ========
+        drops one step from the sampler in place
+        """
         if name is not None:
             i = self.var_names.index(name)
         _ = self.var_names.pop(i)
         _ = self.samplers.pop(i)
 
     def drop_steps(self, *args):
-        for arg in args:
-            if isinstance(str, arg):
-                self.drop_step(name=arg)
-            else:
-                self.drop_step(i=arg)
+        """
+        remove many steps from the sampler by name
 
-    def sample(self, steps = 1, n = None, verbose=True):
-        if n is None:
-            n = steps * len(self.var_names)
-        if n % len(self.var_names) != 0:
-            warn("Sampling {n} steps will stop inside of a full iteration!".format(n=n))
+        Arguments:
+        ==========
+        *args : list of step names to drop.
+
+        Returns:
+        ========
+        drops steps from the sampler in place
+        """
+        for arg in args:
+            self.drop_step(name=arg)
+
+    def sample(self, n = 1, steps=None, verbose=True, inplace=True):
+        """
+        Draw some number of samples from the Gibbs sampler
+
+        Arguments:
+        ==========
+        n       : number of times to cycle the entire sampler (Default: 1)
+        steps   : number of steps to take inside of the sampler (Default: None)
+        verbose : boolean to be verbose about the steps being taken
+        inplace : boolean to run the sampler in place or return a new trace (Default: True)
+
+        Returns:
+        =========
+        adds to the trace of the sampler in place 
+        OR
+        returns a new trace.Trace() object containing the sampling steps
+        """
+        if steps is None:
+            steps = n * len(self.var_names)
+        if steps % len(self.var_names) != 0:
+            warn("Sampling {n} steps will stop inside of a full iteration!".format(n=steps))
         if verbose:
             print("Sampling {pos}:{step}".format(pos=self.pos, step=self.step))
-        for _ in range(n):
+        for _ in range(steps):
             self.next()
         if self.step is 0 and self.backend is not None:
             pt = self.trace.front()
             self.backend.write(','.join([str(pt[k]) for k in self.var_names]))
             self.backend.write('\n')
-        if self.backend is not None:
             #only keep current state
             self.trace.Stochastics = self.trace.front()
+            self.trace._extend(1)
+            self.trace.pos = 0
+        if not inplace:
+            return self.trace
     
     def next(self):
+        """
+        Take one step in the sampler
+
+        Returns:
+        =========
+        steps the sampler inplace. 
+        """
         if self.pos > self.allocated:
             raise StopIteration()
         self.samplers[self.step].next()
