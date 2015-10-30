@@ -89,12 +89,16 @@ ed = y - np.dot(xc, betad)
 eded = np.dot(ed, ed.T)
 e0ed = np.dot(e0, ed.T)
 
+####Actual estimation, still troubleshooting here. 
+
 #mock a pymc3 trace
 statics = globals()
 stochastics = ['betas', 'thetas', 'sigma_e', 'sigma_u', 'rho', 'lam']
 samplers = [samp.Betas, samp.Thetas, samp.Sigma_e, samp.Sigma_u, samp.Rho, samp.Lambda]
 stochastics = {k:v for k,v in zip(stochastics, samplers)}
 gSampler = samp.Gibbs(n=20, backend='trace.csv', statics=statics, **stochastics)
+
+
 
 #trace = Trace(stochastics, 10, statics = globals(), )
 #trace.update('betas', np.zeros((p,1)))
