@@ -30,7 +30,7 @@ class Trace(object):
     """
     def __init__(self, stochs, size, **kwargs):
         self.Stochastics = {k:[None]*size for k in stochs}
-        self._prealloc = size
+        self._preallocated = size
         self.Statics = kwargs.pop('statics', None)
         if self.Statics is None:
             self.Statics = globals() #just pull globals if statics isn't given
@@ -49,10 +49,10 @@ class Trace(object):
         name    : name of variable in trace to update
         val     : value to add to the trace
         """
-        if self.pos > self._alloc:
+        if self.pos > self._preallocated:
             warn("Sampling past preallocated space. Extending")
             self._extend(1)
-            self._alloc += 1
+            self._allocated += 1
         if name not in self.var_names:
             raise KeyError("Variable {n} not found in variable list".format(n=name))
         if self.Stochastics[name][self.pos] is None:

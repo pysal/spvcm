@@ -6,13 +6,18 @@ import copy
 import clogposts as clp
 from trace import Trace
 from six import iteritems as diter
+from utils import logdet
 
 class Gibbs(object):
     """
     A Gibbs Sampler manager.
     """
-    def __init__(self, n=100, backend='', statics=globals(), **kwargs):
-        self.var_names = [k for k in kwargs.keys()]
+    def __init__(self, *args,**kwargs):
+        #parse kwargs because python2 is shit
+        self._allocated = n = kwargs.pop('n', 100)
+        backend = kwargs.pop('backend', '')
+        statics = kwargs.pop('statics', globals())
+        self.var_names = [a[0] for a in args]
         if backend is not '':
             self.backend = open(backend, 'w')
             self.backend.write(','.join([str(name) for name in self.var_names]))
@@ -21,9 +26,9 @@ class Gibbs(object):
         else:
             self.backend = None
         self.trace = Trace(self.var_names, n, statics=statics)
-        self.samplers = [v(self.trace) for v in kwargs.values()]
+        self.samplers = [a[-1](self.trace) for a in args]
         self.step = 0
-        self._alloc = n
+        self._allocated = n
         self.pos = self.trace.pos
     
     def set_start(self, **kwargs):
@@ -157,7 +162,8 @@ class Gibbs(object):
         if steps is None:
             steps = n * len(self.var_names)
         if steps % len(self.var_names) != 0:
-            warn("Sampling {n} steps will stop inside of a full iteration!".format(n=steps))
+            msg = "Sampling {n} steps will stop inside of a full iteration!".format(n=steps)
+            warn(msg)
         if verbose:
             print("Sampling {pos}:{step}".format(pos=self.pos, step=self.step))
         for _ in range(steps):
@@ -170,6 +176,7 @@ class Gibbs(object):
             self.trace.Stochastics = self.trace.front()
             self.trace._extend(1)
             self.trace.pos = 0
+        self.pos = self.trace.pos
         if not inplace:
             return self.trace
     
@@ -181,7 +188,7 @@ class Gibbs(object):
         =========
         steps the sampler inplace. 
         """
-        if self.pos > self.allocated:
+        if self.pos > self._allocated:
             raise StopIteration()
         self.samplers[self.step].next()
         self.step += 1
@@ -210,7 +217,7 @@ class AbstractSampler(object):
         """
         equivalent to calling the sample method
         """
-        return self.__next__()
+        return self.sample()
 
     def __next__(self):
         """
@@ -218,17 +225,14 @@ class AbstractSampler(object):
         """
         return self.sample()
 
-    def sample(self, trace=None, inplace=True):
+    def sample(self, trace=None):
         """
         return a new sample from the conditional posterior function, _cpost,
         using the most recent Random Variables in the attached trace. 
         """
         if trace is None:
             trace = self.trace
-        if not inplace:
-            return self._cpost(copy.copy(trace), inplace=False)
-        else:
-            return self._cpost(trace) #this is where the sampling function goes. 
+        return self._cpost() #this is where the sampling function goes. 
     
     def _cpost(self):
         """
@@ -255,15 +259,15 @@ class Betas(AbstractSampler):
         Full conditional posterior for Beta, as defined in Equation 26 of Dong
         & Harris (2014).
         """
-        s = self.trace.Statics
-        d = self.trace.Derived
         for name in self.required:
             if name in self.trace.Statics:
-                exec("{n} = s['{n}']".format(n=name))
+                exec("{n} = self.trace.Statics['{n}']".format(n=name))
             elif name in self.trace.Derived:
-                exec("{n} = d['{n}']".format(n=name))
+                exec("{n} = self.trace.Derived['{n}']".format(n=name))
             else:
-                raise KeyError("Variable {n} not found in trace".format(n=name))
+                err = "Variable {} not found in trace".format(name)
+                err += " at step {}".format(self.__class__)
+                raise KeyError(err)
         pt = self.trace.front() #grab most current sampled values
         VV = XtX / pt['sigma_e'] + invT0
         v_betas = la.inv(VV) #conditional posterior variance matrix
@@ -276,7 +280,7 @@ class Betas(AbstractSampler):
         new_betas = new_betas.reshape(pt['betas'].shape)
         self.trace.update('betas', new_betas) #update in place
         for name in self.exports:
-            d[name] = eval(name)
+            self.trace.Derived[name] = eval(name)
 
 class Thetas(AbstractSampler):
     """
@@ -304,14 +308,16 @@ class Thetas(AbstractSampler):
             elif name in d:
                 exec("{n} = d['{n}']".format(n=name))
             else:
-                raise KeyError("Variable {n} not found in trace".format(n=name))
+                err = "Variable {} not found in trace".format(name)
+                err += " at step {}".format(self.__class__)
+                raise KeyError(err)
         pt = self.trace.front()
-        B = Ij - pt['lam'] * M
+        B = Ij - pt['lam'] * M #upper-level laplacian
         v_u = np.dot(Delta.T, Delta)/pt['sigma_e'] + np.dot(B.T, B)/pt['sigma_u']
         v_u = la.inv(v_u) #conditional posterior variance matrix
         Xb = np.dot(X, pt['betas'])
         lprod = np.dot(Delta.T, Ay - Xb) / pt['sigma_e']
-        m_u = np.dot(v_u, lprod)
+        m_u = np.dot(v_u, lprod) #conditional posterior means
         new_u = np.random.multivariate_normal(m_u.flatten(), v_u)
         new_u = new_u.reshape(pt['thetas'].shape)
         self.trace.update('thetas', new_u)
@@ -345,7 +351,9 @@ class Sigma_e(AbstractSampler):
             elif name in d:
                 exec("{n} = d['{n}']".format(n=name))
             else:
-                raise KeyError("Variable {n} not found in trace".format(n=name))
+                err = "Variable {} not found in trace".format(name)
+                err += " at step {}".format(self.__class__)
+                raise KeyError(err)
         Delta_u = np.dot(Delta, pt['thetas'])
         e = Ay - Delta_u - Xb
         de = .5 * np.dot(e.T, e) + d0
@@ -381,7 +389,9 @@ class Sigma_u(AbstractSampler):
             elif name in d:
                 exec("{n} = d['{n}']".format(n=name))
             else:
-                raise KeyError("Variable {n} not found in trace".format(n=name))
+                err = "Variable {} not found in trace".format(name)
+                err += " at step {}".format(self.__class__)
+                raise KeyError(err)
         Bus = np.dot(B, pt['thetas'])
         bu = .5 * np.dot(Bus.T, Bus) + b0
         new_sigma_u = stats.invgamma.rvs(au, scale=bu)
@@ -398,12 +408,26 @@ class Lambda(AbstractSampler):
     """
     def __init__(self, trace):
         self.trace = trace
+        required = ["M", "lamspace"]
 
     def _cpost(self):
         """
         Will be the full conditional posterior distribution for lambda as defined
         in equation 32 of Dong & Harris (2014), but is currently Unif(-1,1). 
         """
+        #pt = self.trace.front()
+        #s = self.trace.Statics
+        #d = self.trace.Derived
+        #for name in self.required:
+        #    if name in s:
+        #        exec("{n} = s['{n}']".format(n=name))
+        #    elif name in d:
+        #        exec("{n} = d['{n}']".format(n=name))
+        #    else:
+        #        err = "Variable {} not found in trace".format(name)
+        #        err += " at step {}".format(self.__class__)
+        #        raise KeyError(err)
+        #lpost = 5
         self.trace.update('lam', np.random.random()*2-1)
 
 class Rho(AbstractSampler):
@@ -415,10 +439,53 @@ class Rho(AbstractSampler):
     """
     def __init__(self, trace):
         self.trace = trace
+        self.required = ["e0", "ed", "e0e0", "eded", "e0ed", "Delta_u", "X", "rhos"]
+        self.exports = [""]
 
     def _cpost(self):
         """
         Will be the full conditional posterior distribution for rho as defined
         in equation 31 of Dong & Harris (2014), but is currently Unif(-1,1). 
         """
-        self.trace.update('rho', np.random.random()*2-1)
+        pt = self.trace.front()
+        s = self.trace.Statics
+        d = self.trace.Derived
+        for name in self.required:
+            if name in s:
+                exec("{n} = s['{n}']".format(n=name))
+            elif name in d:
+                exec("{n} = d['{n}']".format(n=name))
+            else:
+                err = "Variable {} not found in trace".format(name)
+                err += " at step {}".format(self.__class__)
+                raise KeyError(err)
+        parvals = rhos[:,0] #values of rho
+        logdets = rhos[:,1] #log determinant of laplacians
+        nrho = len(parvals)
+        iota = np.ones_like(parvals)
+        #have to compute eu-reltaed parameters
+        beta_u, resids, rank, svs = la.lstsq(X, Delta_u)
+        eu = Delta_u - np.dot(X, beta_u)
+        eueu = np.dot(eu.T, eu)
+        e0eu = np.dot(e0.T, eu)
+        edeu = np.dot(ed.T, eu)
+
+        S_rho = (e0e0*iota + parvals**2 * eded + eueu 
+                - 2*parvals*e0ed - 2*e0eu + 2*parvals*edeu)
+        
+        log_density = logdets - S_rho/(2. * pt['sigma_e'])
+        adj = max(log_density)
+        log_density = log_density - adj #downshift to zero?
+
+        density = np.exp(log_density)
+        h = parvals[1] - parvals[0] #step of the grid
+
+        normalizer = h * (density[0]/2. + sum(density[1:-1]) + density[-1]/2.)
+        norm_den = density/normalizer
+        cdist = np.cumsum(norm_den)
+
+        candidate = np.random.random()*norm_den.sum()
+        draw = max([i for i,x in enumerate(cdist) if x < candidate])
+        if (draw > 0) and (draw < nrho):
+            new_rho = parvals[draw]
+        self.trace.update('rho', new_rho)

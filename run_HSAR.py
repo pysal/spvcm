@@ -81,13 +81,13 @@ lambdas = np.hstack((lamspace, lamdets))
 #invariants in rho sampling
 beta0, resids, rank, svs = la.lstsq(xc, y)
 e0 = y - np.dot(xc, beta0)
-e0e0 = np.dot(e0, e0.T)
+e0e0 = np.dot(e0.T, e0)
 
 Wy = np.dot(W, y)
 betad, resids, rank, svs = la.lstsq(xc, Wy)
 ed = y - np.dot(xc, betad)
-eded = np.dot(ed, ed.T)
-e0ed = np.dot(e0, ed.T)
+eded = np.dot(ed.T, ed)
+e0ed = np.dot(e0.T, ed)
 
 ####Actual estimation, still troubleshooting here. 
 
@@ -95,18 +95,15 @@ e0ed = np.dot(e0, ed.T)
 statics = globals()
 stochastics = ['betas', 'thetas', 'sigma_e', 'sigma_u', 'rho', 'lam']
 samplers = [samp.Betas, samp.Thetas, samp.Sigma_e, samp.Sigma_u, samp.Rho, samp.Lambda]
-stochastics = {k:v for k,v in zip(stochastics, samplers)}
-gSampler = samp.Gibbs(n=20, backend='trace.csv', statics=statics, **stochastics)
-
-
+gSampler = samp.Gibbs(*zip(stochastics, samplers), n=20, statics=statics)
 
 #trace = Trace(stochastics, 10, statics = globals(), )
-#trace.update('betas', np.zeros((p,1)))
-#trace.update('thetas', np.zeros((J, 1)))
-#trace.update('sigma_e', 2)
-#trace.update('sigma_u', 2)
-#trace.update('rho', .5)
-#trace.update('lam', .5)
+gSampler.trace.update('betas', np.zeros((p,1)))
+gSampler.trace.update('thetas', np.zeros((J, 1)))
+gSampler.trace.update('sigma_e', 2)
+gSampler.trace.update('sigma_u', 2)
+gSampler.trace.update('rho', .5)
+gSampler.trace.update('lam', .5)
 #
 #
 #
