@@ -161,9 +161,15 @@ class Gibbs(object):
         """
         if steps is None:
             steps = n * len(self.var_names)
+        elif n is None:
+            n = steps / len(self.var_names)
         if steps % len(self.var_names) != 0:
             msg = "Sampling {n} steps will stop inside of a full iteration!".format(n=steps)
             warn(msg)
+        if steps + self.pos > self._allocated:
+            msg = "Taking {} samples runs past preallocated memory. Allocating..."
+            warn(msg.format(n))
+            self.trace._extend(n - self._allocated)
         if verbose:
             print("Sampling {pos}:{step}".format(pos=self.pos, step=self.step))
         for _ in range(steps):
@@ -408,27 +414,53 @@ class Lambda(AbstractSampler):
     """
     def __init__(self, trace):
         self.trace = trace
-        required = ["M", "lamspace"]
+        self.required = ["M", "lambdas"]
+        self.export = []
 
     def _cpost(self):
         """
         Will be the full conditional posterior distribution for lambda as defined
         in equation 32 of Dong & Harris (2014), but is currently Unif(-1,1). 
         """
-        #pt = self.trace.front()
-        #s = self.trace.Statics
-        #d = self.trace.Derived
-        #for name in self.required:
-        #    if name in s:
-        #        exec("{n} = s['{n}']".format(n=name))
-        #    elif name in d:
-        #        exec("{n} = d['{n}']".format(n=name))
-        #    else:
-        #        err = "Variable {} not found in trace".format(name)
-        #        err += " at step {}".format(self.__class__)
-        #        raise KeyError(err)
-        #lpost = 5
-        self.trace.update('lam', np.random.random()*2-1)
+        pt = self.trace.front()
+        s = self.trace.Statics
+        d = self.trace.Derived
+        for name in self.required:
+            if name in s:
+                exec("{n} = s['{n}']".format(n=name))
+            elif name in d:
+                exec("{n} = d['{n}']".format(n=name))
+            else:
+                err = "Variable {} not found in trace".format(name)
+                err += " at step {}".format(self.__class__)
+                raise KeyError(err)
+        parvals = lambdas[:,0] #aka "lambda_exist"
+        logdets = lambdas[:,1] #aka "log_detlambda"
+        nlambda = len(parvals)
+        iota = np.ones_like(parvals)
+        
+        uu = np.dot(pt['thetas'].T, pt['thetas'])
+        uMu = np.dot(np.dot(pt['thetas'].T, M), pt['thetas'])
+        Mu = np.dot(M, pt['thetas'])
+        uMMu = np.dot(Mu.T, Mu)
+
+        S_lambda = uu*iota - 2*parvals*uMu + uMMu*parvals**2
+
+        log_density = logdets - S_lambda/(2*pt['sigma_u'])
+        log_density = log_density - log_density.max()
+
+        density = np.exp(log_density)
+        h = parvals[1] - parvals[0]
+        
+        normalizer = h * (density[0][0]/2. + sum(density[0][1:-1]) + density[0][-1]/2.)
+        norm_den = density/normalizer
+        cdist = np.cumsum(norm_den)
+
+        candidate = np.random.random()*norm_den.sum()
+        draw = max([i for i,x in enumerate(cdist) if x < candidate])
+        if (draw > 0) and (draw < nlambda):
+            new_lambda = parvals[draw]
+        self.trace.update('lam', new_lambda)
 
 class Rho(AbstractSampler):
     """
@@ -440,7 +472,7 @@ class Rho(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["e0", "ed", "e0e0", "eded", "e0ed", "Delta_u", "X", "rhos"]
-        self.exports = [""]
+        self.exports = []
 
     def _cpost(self):
         """
@@ -474,13 +506,13 @@ class Rho(AbstractSampler):
                 - 2*parvals*e0ed - 2*e0eu + 2*parvals*edeu)
         
         log_density = logdets - S_rho/(2. * pt['sigma_e'])
-        adj = max(log_density)
+        adj = log_density.max()
         log_density = log_density - adj #downshift to zero?
 
         density = np.exp(log_density)
         h = parvals[1] - parvals[0] #step of the grid
 
-        normalizer = h * (density[0]/2. + sum(density[1:-1]) + density[-1]/2.)
+        normalizer = h * (density[0][0]/2. + sum(density[0][1:-1]) + density[0][-1]/2.)
         norm_den = density/normalizer
         cdist = np.cumsum(norm_den)
 

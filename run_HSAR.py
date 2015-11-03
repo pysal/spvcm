@@ -75,6 +75,7 @@ rhodets = np.array([la.slogdet(In - rho*W) for rho in rhospace])
 rhodets = (rhodets[:,0] * rhodets[:,1]).reshape(rhospace.shape)
 rhos = np.hstack((rhospace, rhodets))
 lamspace = np.arange(Me_min, Me_max, .001)
+lamspace = lamspace.reshape(lamspace.shape[0], 1)
 lamdets = np.array([la.slogdet(Ij - lam*M)[-1] for lam in lamspace]).reshape(lamspace.shape)
 lambdas = np.hstack((lamspace, lamdets))
 

@@ -30,7 +30,7 @@ class Trace(object):
     """
     def __init__(self, stochs, size, **kwargs):
         self.Stochastics = {k:[None]*size for k in stochs}
-        self._preallocated = size
+        self._allocated = size
         self.Statics = kwargs.pop('statics', None)
         if self.Statics is None:
             self.Statics = globals() #just pull globals if statics isn't given
@@ -49,26 +49,25 @@ class Trace(object):
         name    : name of variable in trace to update
         val     : value to add to the trace
         """
-        if self.pos > self._preallocated:
+        if name not in self.var_names:
+            raise KeyError("Variable {n} not found in variable list".format(n=name))
+        try:
+            if self.Stochastics[name][self.pos] is None:
+                self.Stochastics[name][self.pos] = val
+            else:
+                stepcheck = [v[self.pos] is not None for v in self.Stochastics.values()]
+                if all(stepcheck):
+                    self.pos += 1
+                    self.update(name, val)
+                    return val
+                else:
+                    behind = stepcheck.index(False)
+                    print('Cowardly refusing to leave ' + self.var_names[behind] + ' behind')
+        except IndexError:
             warn("Sampling past preallocated space. Extending")
             self._extend(1)
             self._allocated += 1
-        if name not in self.var_names:
-            raise KeyError("Variable {n} not found in variable list".format(n=name))
-        if self.Stochastics[name][self.pos] is None:
-            try:
-                self.Stochastics[name][self.pos] = val
-            except IndexError:
-                self.Stochatics[name].append(val)
-        else:
-            stepcheck = [v[self.pos] is not None for v in self.Stochastics.values()]
-            if all(stepcheck):
-                self.pos += 1
-                self.update(name, val)
-                return val
-            else:
-                behind = stepcheck.index(False)
-                print('Cowardly refusing to leave ' + self.var_names[behind] + ' behind')
+            self.Stochastics[name].append(val)
     
     def _extend(self, n): 
         """
