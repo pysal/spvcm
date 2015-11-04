@@ -1,5 +1,7 @@
 pyHSAR
 ========
+*edit 11/4/2015: Whoops, realized I was pushing to my github version of this.
+Work should be current now*.
 
 This is @ljwolf's work on estimating an HSAR in python. 
 
