@@ -1,3 +1,4 @@
+from __future__ import division
 import numpy as np
 from numpy import linalg as la
 from scipy import stats
@@ -257,7 +258,7 @@ class Betas(AbstractSampler):
     def __init__(self, trace):
         self.stochs = ['sigma_e', 'rho', 'thetas']
         self.required = ['XtX', 'In', 'W', 'invT0', 'y', 'X', 'T0M0', 'Delta', 'p']
-        self.exports = ['Ay', 'A']
+        self.exports = ['Ay', 'A', 'v_betas', 'm_betas']
         self.trace = trace
 
     def _cpost(self):
@@ -298,7 +299,7 @@ class Thetas(AbstractSampler):
     def __init__(self, trace):
         self.stochs = ['lam', 'sigma_e', 'sigma_u', 'betas']
         self.required = ['Ij', 'M', 'X', 'y', 'J', 'Ay', 'Delta']
-        self.exports = ['Xb', 'B']
+        self.exports = ['Xb', 'B', 'm_u', 'v_u']
         self.trace = trace
     
     def _cpost(self):
@@ -340,7 +341,7 @@ class Sigma_e(AbstractSampler):
     def __init__(self, trace):
         self.stochs = ['thetas']
         self.required = ['Delta', 'Ay', 'Xb', 'ce', 'd0']
-        self.exports = ['Delta_u']
+        self.exports = ['Delta_u', 'de']
         self.trace = trace
 
     def _cpost(self):
@@ -378,7 +379,7 @@ class Sigma_u(AbstractSampler):
     def __init__(self, trace):
         self.stochs = ['thetas']
         self.required = ['B', 'b0', 'au']
-        self.exports = []
+        self.exports = ['bu']
         self.trace = trace
 
     def _cpost(self):
@@ -415,7 +416,7 @@ class Lambda(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["M", "lambdas"]
-        self.export = []
+        self.export = ['rho_rval']
 
     def _cpost(self):
         """
@@ -455,8 +456,9 @@ class Lambda(AbstractSampler):
         normalizer = h * (density[0][0]/2. + sum(density[0][1:-1]) + density[0][-1]/2.)
         norm_den = density/normalizer
         cdist = np.cumsum(norm_den)
-
-        candidate = np.random.random()*norm_den.sum()
+        
+        rho_rval = np.random.random()
+        candidate = rho_rval*norm_den.sum()
         draw = max([i for i,x in enumerate(cdist) if x < candidate])
         if (draw > 0) and (draw < nlambda):
             new_lambda = parvals[draw]
@@ -472,7 +474,7 @@ class Rho(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["e0", "ed", "e0e0", "eded", "e0ed", "Delta_u", "X", "rhos"]
-        self.exports = []
+        self.exports = ['lam_rval']
 
     def _cpost(self):
         """
@@ -515,8 +517,8 @@ class Rho(AbstractSampler):
         normalizer = h * (density[0][0]/2. + sum(density[0][1:-1]) + density[0][-1]/2.)
         norm_den = density/normalizer
         cdist = np.cumsum(norm_den)
-
-        candidate = np.random.random()*norm_den.sum()
+        lam_rval = np.random.random()
+        candidate = lam_rval*norm_den.sum()
         draw = max([i for i,x in enumerate(cdist) if x < candidate])
         if (draw > 0) and (draw < nrho):
             new_rho = parvals[draw]
