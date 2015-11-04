@@ -7,7 +7,7 @@ library(spdep)    # optional
 library(distr)	
 library(spatialprobit) # calculate the vectorised log-determinants
 library(Matrix)
-library(stringr)	
+#library(stringr)	
 
 db <- read.csv('test.csv')
 data <- db
