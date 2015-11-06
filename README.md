@@ -7,7 +7,7 @@ This is @ljwolf's work on estimating an HSAR in python.
 
 I still need to:
 
-<s>1. implement full conditionals for
+1.<s> implement full conditionals for
     - lambda
     - rho
 2. run the gibbs sampler</s> to validate the results.

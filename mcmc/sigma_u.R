@@ -1,4 +1,4 @@
 ################################# Gibbs sampler for updating sigma2u
-Bus <- as.numeric(B%*%t(us))
+Bus <- as.numeric(B%*%us)
 bu <- crossprod(Bus)/2 + b0
-sigma2u[i] <- rinvgamma(1,shape=au,scale=bu)
+#sigma2u[i] <- rinvgamma(1,shape=au,scale=bu)

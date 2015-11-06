@@ -13,7 +13,7 @@ mBetas <- vBetas%*%(tX%*%(Ay-ZUs)/sigma2e[i-1]+T0M0)
 #### distribution could be time-comsuming
 #cholV <- t(chol(vBetas))
 ##### draw form p-dimensitional independent norm distribution
-betas <- rmvnorm(1, mean=mBetas, sigma=vBetas)
+#betas <- rmvnorm(1, mean=mBetas, sigma=vBetas)
 #betas <- rnorm(p)
 #Betas[i,] <- betas <- mBetas + cholV%*%betas
-Betas[i,] <- betas
+#Betas[i,] <- betas

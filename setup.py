@@ -1,13 +1,10 @@
 import numpy as np
-import time
-from trace import Trace
 import samplers as samp
 from six import iteritems as diter
 from numpy import linalg as la
-import scipy as s
-from scipy.linalg import solve
 import pysal as ps
 import pandas as pd
+from rpy2.robjects import r as R
 
 def setup_HSAR():
     data = pd.read_csv("./test.csv")
@@ -99,11 +96,15 @@ def setup_HSAR():
     samplers = [samp.Betas, samp.Thetas, samp.Sigma_e, samp.Sigma_u, samp.Rho, samp.Lambda]
     gSampler = samp.Gibbs(*zip(stochastics, samplers), n=20, statics=statics)
 
-    #trace = Trace(stochastics, 10, statics = globals(), )
-    gSampler.trace.update('betas', np.zeros((p,1)))
-    gSampler.trace.update('thetas', np.zeros((J, 1)))
+    gSampler.trace.update('betas', np.zeros((1,p)))
+    gSampler.trace.update('thetas', np.zeros((J,1)))
     gSampler.trace.update('sigma_e', 2)
     gSampler.trace.update('sigma_u', 2)
     gSampler.trace.update('rho', .5)
     gSampler.trace.update('lam', .5)
     return gSampler
+
+if __name__ == '__main__':
+    s = setup_HSAR()
+    R("source('setup.R')")
+    R("i <- 2")

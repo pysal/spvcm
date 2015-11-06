@@ -15,8 +15,8 @@ mU <- vU%*%(as.numeric(tZ%*%(Ay - Xb))/sigma2e[i-1])
 #### distribution could be time-comsuming
 #cholV <- t(chol(vU))
 #
-us <- rmvnorm(1, mean=mU, sigma=vU)
+#us <- rmvnorm(1, mean=mU, sigma=vU)
 ##### draw form J-dimensitional independent norm distribution
 #us <- rnorm(Utotal)
 #Us[i,] <- us <- mU + cholV%*%us
-Us[i,] <- us
+#Us[i,] <- us
