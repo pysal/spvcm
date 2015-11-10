@@ -5,13 +5,12 @@ from numpy import linalg as la
 import pysal as ps
 import pandas as pd
 from rpy2.robjects import r as R
+from scipy import sparse as spar
 
 def setup_HSAR():
     data = pd.read_csv("./test.csv")
     y = data[['y']].values
     X = data[['x']].values
-
-    xc = np.hstack((np.ones_like(y), X)) #data + constant
 
     W_low = ps.open('w_lower.mtx').read()
     W_low.transform = 'r'
@@ -78,13 +77,13 @@ def setup_HSAR():
     lambdas = np.hstack((lamspace, lamdets))
 
     #invariants in rho sampling
-    beta0, resids, rank, svs = la.lstsq(xc, y)
-    e0 = y - np.dot(xc, beta0)
+    beta0, resids, rank, svs = la.lstsq(X, y)
+    e0 = y - np.dot(X, beta0)
     e0e0 = np.dot(e0.T, e0)
 
     Wy = np.dot(W, y)
-    betad, resids, rank, svs = la.lstsq(xc, Wy)
-    ed = y - np.dot(xc, betad)
+    betad, resids, rank, svs = la.lstsq(X, Wy)
+    ed = Wy - np.dot(X, betad)
     eded = np.dot(ed.T, ed)
     e0ed = np.dot(e0.T, ed)
 
@@ -103,6 +102,19 @@ def setup_HSAR():
     gSampler.trace.update('rho', .5)
     gSampler.trace.update('lam', .5)
     return gSampler
+
+def grid_det(W, emin=-.99, emax=.99,step=.001):
+    grid = np.arange(emin, emax, step)
+    if spar.issparse(W):
+        I = spar.identity(W.shape[0])
+        LUs = [spar.linalg.splu(I - r * W) for r in grid]
+        logdets = [np.sum(np.log(np.abs(LU.U.diagonal()))) for LU in LUs]
+    else:
+        I = np.identity(W.shape[0])
+        logdets = [np.linalg.slogdet(I - r * W)[-1] for r in grid]
+    grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
+    return grid
+
 
 if __name__ == '__main__':
     s = setup_HSAR()

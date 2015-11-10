@@ -67,7 +67,7 @@ class Trace(object):
             warn("Sampling past preallocated space. Extending")
             self._extend(1)
             self._allocated += 1
-            self.Stochastics[name].append(val)
+            self.Stochastics[name][self.pos] = val
     
     def _extend(self, n): 
         """
@@ -97,7 +97,7 @@ class Trace(object):
         """
         return self.point(self.pos -1)
 
-    def front(self):
+    def front(self, *args):
         """
         get the most recent valid values of the trace.
         """
@@ -105,6 +105,8 @@ class Trace(object):
         pre = self.previous()
         
         out = copy.copy(cu)
+        if args is not ():
+            out = {k:v for k,v in diter(out) if k in args}
 
         for k,v in diter(out):
             if v is None:

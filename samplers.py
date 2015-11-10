@@ -204,6 +204,12 @@ class Gibbs(object):
     def __next__(self):
         return self.next()
 
+    def __getattr__(self, v):
+        r = self.trace.Statics.get(v, self.trace.Derived(v, None))
+        if r is None:
+            r = self.trace.front(v)
+        return r
+
     def __del__(self):
         self.backend.close()
 
@@ -416,7 +422,7 @@ class Lambda(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["M", "lambdas"]
-        self.export = ['rho_rval']
+        self.exports = ['lam_rval', 'cdist', 'density', 'norm_den']
 
     def _cpost(self):
         """
@@ -451,18 +457,18 @@ class Lambda(AbstractSampler):
         log_density = log_density - log_density.max()
 
         density = np.exp(log_density)
-        h = parvals[1] - parvals[0]
         
-        normalizer = h * (density[0][0]/2. + sum(density[0][1:-1]) + density[0][-1]/2.)
-        norm_den = density/normalizer
+        norm_den = density/density.sum()
         cdist = np.cumsum(norm_den)
         
-        rho_rval = np.random.random()
-        candidate = rho_rval*norm_den.sum()
+        lam_rval = np.random.random()
+        candidate = lam_rval*norm_den.sum()
         draw = max([i for i,x in enumerate(cdist) if x < candidate])
         if (draw > 0) and (draw < nlambda):
             new_lambda = parvals[draw]
         self.trace.update('lam', new_lambda)
+        for name in self.exports:
+            self.trace.Derived[name] = eval(name)
 
 class Rho(AbstractSampler):
     """
@@ -474,7 +480,7 @@ class Rho(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["e0", "ed", "e0e0", "eded", "e0ed", "Delta_u", "X", "rhos"]
-        self.exports = ['lam_rval']
+        self.exports = ['rho_rval', 'density', 'cdist']
 
     def _cpost(self):
         """
@@ -512,14 +518,14 @@ class Rho(AbstractSampler):
         log_density = log_density - adj #downshift to zero?
 
         density = np.exp(log_density)
-        h = parvals[1] - parvals[0] #step of the grid
 
-        normalizer = h * (density[0][0]/2. + sum(density[0][1:-1]) + density[0][-1]/2.)
-        norm_den = density/normalizer
+        norm_den = density/density.sum()
         cdist = np.cumsum(norm_den)
-        lam_rval = np.random.random()
-        candidate = lam_rval*norm_den.sum()
+        rho_rval = np.random.random()
+        candidate = rho_rval*norm_den.sum()
         draw = max([i for i,x in enumerate(cdist) if x < candidate])
         if (draw > 0) and (draw < nrho):
             new_rho = parvals[draw]
         self.trace.update('rho', new_rho)
+        for name in self.exports:
+            self.trace.Derived[name] = eval(name)
