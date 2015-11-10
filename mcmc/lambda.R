@@ -20,15 +20,15 @@ log_den <- log_den-adj
 ##### the density
 den <- exp(log_den)
 ###### the interval separating lambda is h=0.001
-#h <- 0.001
-#
-###### Integration to calculate the normalized constant
-###### using the  trapezoid rule
-#
-#ISUM <- h*(den[1]/2 + sum(den[2:1890]) + den[1891]/2)
-#norm_den <- den/ISUM
-###### cumulative density
-#cumu_den <- cumsum(norm_den)
+h <- lambda_exist[2] - lambda_exist[1]
+
+##### Integration to calculate the normalized constant
+##### using the  trapezoid rule
+
+ISUM <- sum(den)
+norm_den <- den/ISUM
+##### cumulative density
+cumu_den <- cumsum(norm_den)
 #
 ###### Inverse sampling
 #rnd <- rval*sum(norm_den)
