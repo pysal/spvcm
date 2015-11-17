@@ -37,9 +37,10 @@ Z <- as(Z,"dgCMatrix")
 ### Arguments used in the function
 y <- data$y
 X <- as.matrix(data$x)
+X <- cbind(matrix(rep(1, length(X))), X) #add constant
 
 ### Need to provide log-determiant of the Jacobian terms of both the lower and higher levels
-rmin <- -0.9
+rmin <- -0.99
 rmax <- 0.99
 # convert spatial weights matrix to a required format 
 # I really should apologise that I forgot this in the HSAR.R function.
@@ -115,12 +116,12 @@ T0 <- diag(100,p)
 c0=d0=a0=b0=0.01
 
 ################ Store MCMC results
-Betas <- matrix(0,nrow=Nsim,ncol=p)
-Us <- matrix(0,nrow=Nsim,ncol=Utotal)
-sigma2e <- rep(0,times=Nsim)
-sigma2u <- rep(0,times=Nsim)
-rho <- rep(0,times=Nsim)
-lambda <- rep(0,times=Nsim)
+Betas <- matrix(0,nrow=Nsim+1,ncol=p)
+Us <- matrix(0,nrow=Nsim+1,ncol=Utotal)
+sigma2e <- rep(0,times=Nsim+1)
+sigma2u <- rep(0,times=Nsim+1)
+rho <- rep(0,times=Nsim+1)
+lambda <- rep(0,times=Nsim+1)
 
 #### initial values for model parameters (better initial values will be that from a classic multilevel model)
 sigma2e[1] <- 2

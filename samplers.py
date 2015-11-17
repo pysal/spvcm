@@ -1,4 +1,5 @@
 from __future__ import division
+
 import numpy as np
 from numpy import linalg as la
 from scipy import stats
@@ -30,8 +31,11 @@ class Gibbs(object):
         self.samplers = [a[-1](self.trace) for a in args]
         self.step = 0
         self._allocated = n
-        self.pos = self.trace.pos
-    
+   
+    @property
+    def pos(self):
+        return self.trace.pos
+
     def set_start(self, **kwargs):
         """
         Pass a dictionary of starting values for the trace.
@@ -172,9 +176,9 @@ class Gibbs(object):
             warn(msg.format(n))
             self.trace._extend(n - self._allocated)
         if verbose:
-            print("Sampling {pos}:{step}".format(pos=self.pos, step=self.step))
+            print(("Sampling {pos}:{step}".format(pos=self.pos, step=self.step)))
         for _ in range(steps):
-            self.next()
+            self.__next__()
         if self.step is 0 and self.backend is not None:
             pt = self.trace.front()
             self.backend.write(','.join([str(pt[k]) for k in self.var_names]))
@@ -187,7 +191,7 @@ class Gibbs(object):
         if not inplace:
             return self.trace
     
-    def next(self):
+    def __next__(self):
         """
         Take one step in the sampler
 
@@ -195,17 +199,12 @@ class Gibbs(object):
         =========
         steps the sampler inplace. 
         """
-        if self.pos > self._allocated:
-            raise StopIteration()
-        self.samplers[self.step].next()
+        self.samplers[self.step].__next__()
         self.step += 1
         self.step %= len(self.samplers)
 
-    def __next__(self):
-        return self.next()
-
     def __getattr__(self, v):
-        r = self.trace.Statics.get(v, self.trace.Derived(v, None))
+        r = self.trace.Statics.get(v, self.trace.Derived.get(v, None))
         if r is None:
             r = self.trace.front(v)
         return r
@@ -226,7 +225,7 @@ class AbstractSampler(object):
         self.statics = statics
         self.exports = exports
 
-    def next(self):
+    def __next__(self):
         """
         equivalent to calling the sample method
         """
@@ -287,7 +286,7 @@ class Betas(AbstractSampler):
         A = In - pt['rho'] * W
         Ay = np.dot(A, y)
         Delta_u = np.dot(Delta, pt['thetas']) #recall, HSAR.R labels Delta from paper as Z
-        lprod = np.dot(X.T, (Ay - Delta_u)/pt['sigma_e'] + T0M0) 
+        lprod = np.dot(X.T, (Ay - Delta_u)/pt['sigma_e']) + T0M0.reshape(p,1)
         m_betas = np.dot(v_betas, lprod) #conditional posterior mean
         new_betas = np.random.multivariate_normal(m_betas.flatten(), v_betas)
         new_betas = new_betas.reshape(pt['betas'].shape)
@@ -324,11 +323,12 @@ class Thetas(AbstractSampler):
                 err = "Variable {} not found in trace".format(name)
                 err += " at step {}".format(self.__class__)
                 raise KeyError(err)
-        pt = self.trace.front()
+        pt = self.trace.previous()
+        betas_now = self.trace.current()['betas']
         B = Ij - pt['lam'] * M #upper-level laplacian
         v_u = np.dot(Delta.T, Delta)/pt['sigma_e'] + np.dot(B.T, B)/pt['sigma_u']
         v_u = la.inv(v_u) #conditional posterior variance matrix
-        Xb = np.dot(X, pt['betas'])
+        Xb = np.dot(X, betas_now.T) #uses recent copy of betas
         lprod = np.dot(Delta.T, Ay - Xb) / pt['sigma_e']
         m_u = np.dot(v_u, lprod) #conditional posterior means
         new_u = np.random.multivariate_normal(m_u.flatten(), v_u)
@@ -355,7 +355,8 @@ class Sigma_e(AbstractSampler):
         Full conditional posterior for sigma_e as defined in equation 30 in Dong
         & Harris (2014)
         """
-        pt = self.trace.front()
+        pt = self.trace.previous()
+        cpt = self.trace.front()
         s = self.trace.Statics
         d = self.trace.Derived
         for name in self.required:
@@ -367,7 +368,7 @@ class Sigma_e(AbstractSampler):
                 err = "Variable {} not found in trace".format(name)
                 err += " at step {}".format(self.__class__)
                 raise KeyError(err)
-        Delta_u = np.dot(Delta, pt['thetas'])
+        Delta_u = np.dot(Delta, cpt['thetas'])
         e = Ay - Delta_u - Xb
         de = .5 * np.dot(e.T, e) + d0
         new_sigma_e = stats.invgamma.rvs(ce, scale=de)
@@ -393,7 +394,8 @@ class Sigma_u(AbstractSampler):
         Full conditional posterior for sigma_u as defined in equation 29 of
         Dong & Harris (2014)
         """
-        pt = self.trace.front()
+        pt = self.trace.previous()
+        cpt = self.trace.current()
         s = self.trace.Statics
         d = self.trace.Derived
         for name in self.required:
@@ -405,7 +407,7 @@ class Sigma_u(AbstractSampler):
                 err = "Variable {} not found in trace".format(name)
                 err += " at step {}".format(self.__class__)
                 raise KeyError(err)
-        Bus = np.dot(B, pt['thetas'])
+        Bus = np.dot(B, cpt['thetas'])
         bu = .5 * np.dot(Bus.T, Bus) + b0
         new_sigma_u = stats.invgamma.rvs(au, scale=bu)
         self.trace.update('sigma_u', new_sigma_u)
@@ -422,14 +424,16 @@ class Lambda(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["M", "lambdas"]
-        self.exports = ['lam_rval', 'cdist', 'density', 'norm_den']
+        self.exports = ['lambda_rval', 'parvals', 'norm_den', 'cdist', 'S_lambda',
+                'log_density']
 
     def _cpost(self):
         """
         Will be the full conditional posterior distribution for lambda as defined
         in equation 32 of Dong & Harris (2014), but is currently Unif(-1,1). 
         """
-        pt = self.trace.front()
+        pt = self.trace.previous()
+        cpt = self.trace.current()
         s = self.trace.Statics
         d = self.trace.Derived
         for name in self.required:
@@ -446,9 +450,9 @@ class Lambda(AbstractSampler):
         nlambda = len(parvals)
         iota = np.ones_like(parvals)
         
-        uu = np.dot(pt['thetas'].T, pt['thetas'])
-        uMu = np.dot(np.dot(pt['thetas'].T, M), pt['thetas'])
-        Mu = np.dot(M, pt['thetas'])
+        uu = np.dot(cpt['thetas'].T, cpt['thetas'])
+        uMu = np.dot(np.dot(cpt['thetas'].T, M), cpt['thetas'])
+        Mu = np.dot(M, cpt['thetas'])
         uMMu = np.dot(Mu.T, Mu)
 
         S_lambda = uu*iota - 2*parvals*uMu + uMMu*parvals**2
@@ -461,11 +465,15 @@ class Lambda(AbstractSampler):
         norm_den = density/density.sum()
         cdist = np.cumsum(norm_den)
         
-        lam_rval = np.random.random()
-        candidate = lam_rval*norm_den.sum()
-        draw = max([i for i,x in enumerate(cdist) if x < candidate])
-        if (draw > 0) and (draw < nlambda):
-            new_lambda = parvals[draw]
+        sampling = True
+        while sampling:
+            lambda_rval = np.random.random()
+            candidate = lambda_rval * norm_den.sum()
+            indexes = [i for i,x in enumerate(cdist) if x <= candidate]
+            if indexes is not []:
+                sampling = False
+                idraw = max(indexes)
+                new_lambda = parvals[idraw] 
         self.trace.update('lam', new_lambda)
         for name in self.exports:
             self.trace.Derived[name] = eval(name)
@@ -480,14 +488,15 @@ class Rho(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["e0", "ed", "e0e0", "eded", "e0ed", "Delta_u", "X", "rhos"]
-        self.exports = ['rho_rval', 'density', 'cdist']
+        self.exports = ['rho_rval', 'parvals', 'norm_den', 'cdist', 'S_rho',
+                'log_density']
 
     def _cpost(self):
         """
         Will be the full conditional posterior distribution for rho as defined
         in equation 31 of Dong & Harris (2014), but is currently Unif(-1,1). 
         """
-        pt = self.trace.front()
+        pt = self.trace.previous()
         s = self.trace.Statics
         d = self.trace.Derived
         for name in self.required:
@@ -521,11 +530,15 @@ class Rho(AbstractSampler):
 
         norm_den = density/density.sum()
         cdist = np.cumsum(norm_den)
-        rho_rval = np.random.random()
-        candidate = rho_rval*norm_den.sum()
-        draw = max([i for i,x in enumerate(cdist) if x < candidate])
-        if (draw > 0) and (draw < nrho):
-            new_rho = parvals[draw]
+        sampling = True
+        while sampling:
+            rho_rval = np.random.random()
+            candidate = rho_rval * norm_den.sum()
+            indexes = [i for i,x in enumerate(cdist) if x <= candidate]
+            if indexes is not []:
+                sampling = False
+                idraw = max(indexes)
+                new_rho = parvals[idraw] 
         self.trace.update('rho', new_rho)
         for name in self.exports:
             self.trace.Derived[name] = eval(name)

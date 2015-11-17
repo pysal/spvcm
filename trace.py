@@ -1,6 +1,7 @@
 from six import iteritems as diter
 from warnings import warn
 import copy
+import matplotlib.pyplot as plt
 
 class Trace(object):
     """
@@ -29,15 +30,21 @@ class Trace(object):
     const_names : names of static values recorded in Statics
     """
     def __init__(self, stochs, size, **kwargs):
-        self.Stochastics = {k:[None]*size for k in stochs}
+        self.Stochastics = {}
+        self.Distplots = {}
+        for k in stochs:
+            self.Stochastics.update({k:[None]*size})
+            tfig = plt.Figure()
+            tax = tfig.add_subplot(1,1,1)
+            self.Distplots.update({k:(tfig, tax)})
         self._allocated = size
         self.Statics = kwargs.pop('statics', None)
         if self.Statics is None:
             self.Statics = globals() #just pull globals if statics isn't given
         self.Derived = {}
         self.pos = 0
-        self.var_names = self.Stochastics.keys()
-        self.const_names = self.Statics.keys()
+        self.var_names = list(self.Stochastics.keys())
+        self.const_names = list(self.Statics.keys())
 
     def update(self, name, val):
         """
@@ -55,14 +62,14 @@ class Trace(object):
             if self.Stochastics[name][self.pos] is None:
                 self.Stochastics[name][self.pos] = val
             else:
-                stepcheck = [v[self.pos] is not None for v in self.Stochastics.values()]
+                stepcheck = [v[self.pos] is not None for v in list(self.Stochastics.values())]
                 if all(stepcheck):
                     self.pos += 1
                     self.update(name, val)
                     return val
                 else:
                     behind = stepcheck.index(False)
-                    print('Cowardly refusing to leave ' + self.var_names[behind] + ' behind')
+                    print(('Cowardly refusing to leave ' + self.var_names[behind] + ' behind'))
         except IndexError:
             warn("Sampling past preallocated space. Extending")
             self._extend(1)
@@ -112,4 +119,7 @@ class Trace(object):
             if v is None:
                 out[k] = pre[k]
 
-        return out
+        if args is ():
+            return out
+        else:
+            return tuple(out[arg] for arg in args)

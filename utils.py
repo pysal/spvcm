@@ -17,7 +17,7 @@ def time_gibbs(Gibbs, n=100):
     for it in range(n*len(Gibbs.var_names)):
         currname = Gibbs.var_names[it % len(Gibbs.var_names)]
         s = time.time()
-        Gibbs.next()
+        next(Gibbs)
         times[currname].append(time.time() - s)
     return times
 

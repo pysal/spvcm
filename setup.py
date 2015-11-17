@@ -6,11 +6,16 @@ import pysal as ps
 import pandas as pd
 from rpy2.robjects import r as R
 from scipy import sparse as spar
+import validate as v
 
 def setup_HSAR():
     data = pd.read_csv("./test.csv")
     y = data[['y']].values
     X = data[['x']].values
+    #check if we need a constant. 
+    xc = np.ones_like(X)
+    Xc = np.hstack((xc, X))
+    X = Xc
 
     W_low = ps.open('w_lower.mtx').read()
     W_low.transform = 'r'
@@ -66,12 +71,12 @@ def setup_HSAR():
     au = J/2. + a0
 
     ##set up griddy gibbs
-    rhospace = np.arange(We_min, We_max,.001)
+    rhospace = np.arange(-.99, .99,.001)
     rhospace = rhospace.reshape(rhospace.shape[0], 1)
     rhodets = np.array([la.slogdet(In - rho*W) for rho in rhospace])
     rhodets = (rhodets[:,0] * rhodets[:,1]).reshape(rhospace.shape)
     rhos = np.hstack((rhospace, rhodets))
-    lamspace = np.arange(Me_min, Me_max, .001)
+    lamspace = np.arange(-.99, .99, .001)
     lamspace = lamspace.reshape(lamspace.shape[0], 1)
     lamdets = np.array([la.slogdet(Ij - lam*M)[-1] for lam in lamspace]).reshape(lamspace.shape)
     lambdas = np.hstack((lamspace, lamdets))
@@ -93,7 +98,7 @@ def setup_HSAR():
     statics = locals()
     stochastics = ['betas', 'thetas', 'sigma_e', 'sigma_u', 'rho', 'lam']
     samplers = [samp.Betas, samp.Thetas, samp.Sigma_e, samp.Sigma_u, samp.Rho, samp.Lambda]
-    gSampler = samp.Gibbs(*zip(stochastics, samplers), n=20, statics=statics)
+    gSampler = samp.Gibbs(*list(zip(stochastics, samplers)), n=20, statics=statics)
 
     gSampler.trace.update('betas', np.zeros((1,p)))
     gSampler.trace.update('thetas', np.zeros((J,1)))
@@ -101,6 +106,8 @@ def setup_HSAR():
     gSampler.trace.update('sigma_u', 2)
     gSampler.trace.update('rho', .5)
     gSampler.trace.update('lam', .5)
+    gSampler.trace.pos += 1
+    
     return gSampler
 
 def grid_det(W, emin=-.99, emax=.99,step=.001):
