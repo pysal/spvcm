@@ -1,7 +1,5 @@
 pyHSAR
 ========
-*edit 11/4/2015: Whoops, realized I was pushing to my github version of this.
-Work should be current now*.
 
 This is @ljwolf's work on estimating an HSAR in python. 
 
@@ -10,9 +8,11 @@ I still need to:
 1.<s> implement full conditionals for
     - lambda
     - rho
-2. run the gibbs sampler</s> to validate the results.
+2. run the gibbs samplerto validate the results.</s>
 
-I'll make a notebook explaining this, too. 
+If you'd like to see an example run of the sampler, check out
+`HSAR_Validation.ipynb`. I've included traces of the sampler, and comparison to
+the dong & harris paper. 
 
 Validation, at this point, shows that some of the steps generate slightly
 different results. I've already squashed a few bugs (and, consequently, cannot
@@ -24,17 +24,15 @@ Code
 =====
 
 - `trace.py` - mocks PyMC3 traces. deliberately designed to be easy to port to
-PyMC3 when ready. 
-- `samplers.py` - Gibbs sampler & sampling steps. The `Gibbs` class would be akin
-to the PyMC3 `Metropolis`, `Slice`, or `NUTS` samplers. I might eventually push
-this back upstream.
-
-In esence, every `Gibbs` object has three things attached to it. 1 is a list of
-the names of the parameters. 2 is a `Trace` object that stores data about the
-sample. 3 is a list of full conditional posterior samplers. 1 & 3 could get
-consolidated into a single property using an ordered dict, but I don't really
-like that solution right now. Might change my mind later. 
-
+  PyMC3 when ready. 
+- `samplers.py` - Gibbs sampler & sampling steps. The `Gibbs` class would be
+  akin to the PyMC3 `Metropolis`, `Slice`, or `NUTS` samplers. I might
+  eventually push this back upstream. In esence, every `Gibbs` object has three
+  things attached to it. 1 is a list of the names of the parameters. 2 is a
+  `Trace` object that stores data about the sample. 3 is a list of full
+  conditional posterior samplers. 1 & 3 could get consolidated into a single
+  property using an ordered dict, but I don't really like that solution right
+  now. Might change my mind later. 
 - `setup.py` - builds the data and sets up the sampler. This is problem
   specific. You can configure the individual samplers to expect certain things
   from the trace using their "required" list. Right now, everything in the setup
@@ -42,6 +40,9 @@ like that solution right now. Might change my mind later.
   it needs to run a sample. This allows us to flexibly define constants we need
   in the gibbs run, but also make it flexible for other configurations of the
   sampler. things are exported/expected using the required & exports lists.
+- `validate.py` - contains the code to validate the sampling runs. By validate,
+  I mean compare intermediate computations against from R and Python. 
+
 
 Data
 =====
