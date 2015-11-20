@@ -2,16 +2,18 @@ import pysal as ps
 import numpy as np
 import dgp
 
-W_lower = ps.lat2W(5000,5000) #underlying grid is 5000x5000
-W_lower.transform = 'r'
-W = W_lower.full()[0]
-W_upper = ps.lat2W(50,50) #each regime is 100x100
-W_upper.transform = 'r'
-M = W_upper.full()[0]
+data = dgp.scenario(10,100)
 
-N = W_lower.n
-J = W_upper.n
+ycols = [x.replace('-', 'n') for x in data.columns if x.startswith('Y')]
+dcols = [x for x in data.columns if not x.startswith('Y')]
+yclean = []
+for y in ycols:
+    col,r,l = y.split('_')
+    if len(r) > 4:
+        r = '0.0'
+    if len(l) > 4:
+        l = '0.0'
+    yclean.append('_'.join([col,r,l]))
+data.columns = ycols + dcols
 
-X,Z = dgp.design_matrix(N,J)
-Delta = dgp._mkDelta(N,J)
-Y = dgp.outcome(X,Z,W,M,Delta, .62, .24) #setup problem with rho = .62, lam=.24
+

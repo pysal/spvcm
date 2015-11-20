@@ -1,25 +1,20 @@
 import pysal as ps
 import numpy as np
 import dgp
+import pandas as pd
 
-print("weights")
-W_lower = ps.lat2W(10,10) #underlying grid is 100x100
-W_lower.transform = 'r'
-W = W_lower.full()[0]
-W_upper = ps.lat2W(5,5) #each regime is 20x20
-W_upper.transform = 'r'
-M = W_upper.full()[0]
+data = dgp.scenario(2,10)
 
-N = W_lower.n
-J = W_upper.n
+ycols = [x for x in data.columns if x.startswith('Y')]
+dcols = [x for x in data.columns if not x.startswith('Y')]
+yclean = []
 
-print("design")
-X,Z = dgp.design_matrix(N,J)
+for y in ycols:
+    col,r,l = y.split('_')
+    if len(r) > 4:
+        r = '0.0'
+    if len(l) > 4:
+        l = '0.0'
+    yclean.append('_'.join([col,r,l]))
 
-print("delta")
-Delta = dgp._mkDelta(N,J)
-
-print("Y")
-Y = dgp.outcome(X,Z,W,M,Delta,.64,.23)
-
-
+data.columns = yclean + dcols

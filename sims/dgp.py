@@ -1,9 +1,11 @@
 import numpy as np
 from scipy import sparse as spar
 from scipy.sparse import linalg as spla
+from utils import _mksparse
 import pysal as ps
+import pandas as pd
 
-def design_matrix(N,J,seed=8879):
+def design_matrix(N,J,Delta=None,seed=8879):
     """ 
     Constructs two design matrices, X and Z, 
     
@@ -22,31 +24,35 @@ def design_matrix(N,J,seed=8879):
     The size of X and Z are asserted against the input N and J, to ensure no
     mistakes in dimensions have occurred.
     """
+    if Delta is None:
+        deltawasnone = True
+        Delta = _mkDelta(N,J)
+    else:
+        deltawasnone = False
+
     np.random.seed(seed=seed)
 
-    x0_CONST = np.random.random()*20 - 10
-    x0 = np.ones(N) * x0_CONST #constant
-
+    x0 = np.ones(N) 
     x1 = np.random.random(size=N)*10 - 5 #continuous x \in [-10,10]
-
     x2 = np.random.random(size=N)*6 - 3 #continuous x \in [-3,3] won't be significant
-
     x3 = np.random.randint(3, size=N) - 1 #balanced categorical x \in {-1,0,1}
-
     X = np.vstack((x0,x1,x2,x3)).T
     N2,p = X.shape #3 covariates + constant
     
-    z0_CONST = np.random.random()*2 - 1
-    z0 = np.ones(J) * z0_CONST
+    z0 = np.ones(J) 
     z1 = np.random.random(size=J)*8 - 4 #continuous x \in [-8,8]
-
     Z = np.vstack((z0,z1)).T
     J2, q = Z.shape
 
     assert N == N2
     assert J == J2
-
-    return X,Z
+    
+    Z = np.dot(Delta, Z)
+    
+    if deltawasnone:
+        return X,Z, Delta
+    else:
+        return X,Z
 
 def outcome(X, Z, W, M, Delta, rho, lam, 
             Betas=None, Gammas=None, epsilons=None, etas=None, seed=8879):
@@ -62,13 +68,13 @@ def outcome(X, Z, W, M, Delta, rho, lam,
     J = M.shape[0]
     W, M = _mksparse(W, M)
     if etas is None:
-        etas = np.random.normal(0,.5, size=M.shape[0]).reshape(J,1)
+        etas = np.random.normal(0,.5, size=J).reshape(J,1)
     if epsilons is None:
-        epsilons = np.random.normal(0,1,size=W.shape[0]).reshape(N,1)
+        epsilons = np.random.normal(0,1,size=N).reshape(N,1)
     if Betas is None:
-        Betas = np.array([[1.,1.,0.,2.]]).T
+        Betas = np.array([[.72,1.3,0.,2.2]]).T
     if Gammas is None:
-        Gammas = np.array([[1,3]]).T
+        Gammas = np.array([[.22,3.]]).T
 
     In = spar.identity(N) #will clobber Ipython history
     Ij = spar.identity(J) 
@@ -76,18 +82,89 @@ def outcome(X, Z, W, M, Delta, rho, lam,
     LU_up = spla.splu(Ij - lam * M)
     Li_lo = LU_lo.solve(In.toarray()) #solves (I - rho W)*X=I, the inverse laplacian
     Li_up = LU_up.solve(Ij.toarray()) #solves (I - lam M)*X=I, ditto above
-    covars = np.dot(X, Betas) + np.dot(Delta, np.dot(Z, Gammas))
+    covars = np.dot(X, Betas) + np.dot(Z, Gammas)
 
     inner = covars + np.dot(np.dot(Delta, Li_up), etas) + epsilons
     return np.dot(Li_lo, inner)
 
-def _mksparse(*args, **kwargs):
-    args = list(args)
-    spfunc = kwargs.pop('spfunc', spar.csc_matrix)
-    for i,arg in enumerate(args):
-        if not spar.issparse(arg):
-            args[i] = spfunc(arg)
-    return args
+def test_space(W,M,**kwargs):
+    """
+    Construct a testing dataframe containing 1 design matrix (X & Z columns) and
+    many outcome vectors (Y columns) over a grid of spatial parameters rho,
+    lambda. 
+
+    Parameters
+    ===========
+    W   :   Lower level pysal weights object
+    M   :   Upper level pysal weights object
+    
+    Optional
+    --------
+    seed    :   seed to set for random effects generation
+    minrho  :   minimum rho value for test grid, minimum for np.arange
+    maxrho  :   maximum rho value for test grid, maximum for np.arange
+    rhostep :   steps between rho values, stepsize for np.arange
+    minlam  :   minimum lambda value for test grid, minimum for np.arange
+    maxlam  :   maximum lambda value for test grid, maximum for np.arange
+    lamstep :   steps between lambda values, stepsize for np.arange
+    Betas   :   vector of lower-level effect sizes (default: .72, 1.3, 0, 2.2)
+    Gammas  :   vector of upper-level effect sizes (default: .22, 3.0)
+    epsilons:   vector of lower-level random errors (default: normal(0,1,size=N))
+    etas    :   vector of upper-level random errors (default: norma(0,.5,size=J))
+
+    Returns
+    ========
+    fulldata    :   Pandas Dataframe containing design matrix (X, Z columns) and
+                    outcome vectors (Y columns) that are suffixed with the rho/lambda 
+                    values used. 
+    """
+    seed = kwargs.pop('seed', 8879)
+    minrho = kwargs.pop('minrho', -.8)
+    maxrho = kwargs.pop('maxrho', .81) #offset to hit .8 at default step
+    rhostep = kwargs.pop('rhostep', .2)
+    rhospace = np.arange(minrho, maxrho, rhostep)
+
+    minlam = kwargs.pop('minlam', minrho) #keep trial matrix square
+    maxlam = kwargs.pop('maxlam', maxrho)
+    lamstep = kwargs.pop('lamstep', rhostep)
+    lamspace = np.arange(minlam, maxlam, lamstep)
+
+    N,J = W.n, M.n
+
+    Ws, Ms = _mksparse(W,M, spfunc=lambda x: x.sparse) #Sorry, I'm functional :)
+
+    configurations = [(r,l) for r in rhospace for l in lamspace] #left slower?
+
+    X,Z,Delta = design_matrix(N,J)
+    
+    p = X.shape[-1]
+    q = Z.shape[-1]
+    i_in_j = Delta.sum(axis=0)
+
+    dcols = ['X{}'.format(i) for i in range(p)] + ['Z{}'.format(j) for j in range(q)]
+    data = pd.DataFrame(np.hstack((X,Z)), columns=dcols)
+    
+    ycols = ['Y_{}_{}'.format(r,l) for r,l in configurations]
+    ydata = np.hstack([outcome(X,Z,Ws,Ms,Delta,r,l,**kwargs) for rl in configurations])
+    ydf = pd.DataFrame(ydata, columns=ycols)
+
+    fulldata = pd.merge(ydf, data, left_index=True, right_index=True)
+    return fulldata
+
+def scenario(up, low):
+    if type(up) == tuple:
+        W_upper = ps.lat2W(*up)
+    else:
+        W_upper = ps.lat2W(up,up)
+
+    if type(low) == tuple:
+        W_lower = ps.lat2W(*low)
+    else:
+        W_lower = ps.lat2W(low,low)
+
+    W_upper.transform = 'r'
+    W_lower.transform = 'r'
+    return test_space(W_lower, W_upper)
 
 def _mkDelta(N,J):
     outmat = np.zeros((N,J))
