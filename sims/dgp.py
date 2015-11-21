@@ -70,11 +70,11 @@ def outcome(X, Z, W, M, Delta, rho, lam,
     if etas is None:
         etas = np.random.normal(0,.5, size=J).reshape(J,1)
     if epsilons is None:
-        epsilons = np.random.normal(0,1,size=N).reshape(N,1)
+        epsilons = np.random.normal(0,.7,size=N).reshape(N,1)
     if Betas is None:
-        Betas = np.array([[.72,1.3,0.,2.2]]).T
+        Betas = np.array([[-3.,6.,0.,2.]]).T
     if Gammas is None:
-        Gammas = np.array([[.22,3.]]).T
+        Gammas = np.array([[5.,-4.]]).T
 
     In = spar.identity(N) #will clobber Ipython history
     Ij = spar.identity(J) 
@@ -151,7 +151,21 @@ def test_space(W,M,**kwargs):
     fulldata = pd.merge(ydf, data, left_index=True, right_index=True)
     return fulldata
 
-def scenario(up, low):
+def scenario(up, low, **kwargs):
+    """
+    Construct one square Monte Carlo testing scenario with lower-level
+    dimensions low X low and upper-level dimensions up X up.
+
+    Parameters
+    ===========
+    up  :   side length of upper-level regular lattice
+    low :   side length of lower-level regular lattice
+
+    Returns
+    ========
+    a test space dataframe containing multiple outcome columns constructed over
+    the range of parameter values. 
+    """
     if type(up) == tuple:
         W_upper = ps.lat2W(*up)
     else:
@@ -164,9 +178,13 @@ def scenario(up, low):
 
     W_upper.transform = 'r'
     W_lower.transform = 'r'
-    return test_space(W_lower, W_upper)
+    return test_space(W_lower, W_upper, **kwargs), W_upper, W_lower
 
 def _mkDelta(N,J):
+    """
+    Make an N X J "Delta" matrix recording an individual's membership in a
+    group. 
+    """
     outmat = np.zeros((N,J))
 
     splits = np.split(np.arange(0,N), J)

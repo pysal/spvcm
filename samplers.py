@@ -5,7 +5,6 @@ from numpy import linalg as la
 from scipy import stats
 from warnings import warn
 import copy
-import clogposts as clp
 from trace import Trace
 from six import iteritems as diter
 from utils import logdet
@@ -187,7 +186,6 @@ class Gibbs(object):
             self.trace.Stochastics = self.trace.front()
             self.trace._extend(1)
             self.trace.pos = 0
-        self.pos = self.trace.pos
         if not inplace:
             return self.trace
     
