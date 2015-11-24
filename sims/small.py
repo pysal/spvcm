@@ -27,6 +27,7 @@ data.columns = yclean + dcols
 tester = mc.mktests(data, W,M)
 
 def fsample(x):
+    print("testing {},{}".format(x[0], x[1]))
     r,l,s = x
     s.sample(10000)
     trx = np.vstack(s.trace.Stochastics['betas'])
@@ -47,9 +48,5 @@ def fsample(x):
     mkplots(tdf.drop(1000), r, l, prefix=pstring)
     del tdf, x
 
-for x in tester:
-    print("testing {},{}".format(x[0], x[1]))
-    fsample(x)
-
-#P = mp.Pool(mp.cpu_count())
-#P.map(fsample, tester)
+P = mp.Pool(mp.cpu_count())
+P.map(fsample, tester)

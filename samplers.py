@@ -208,7 +208,10 @@ class Gibbs(object):
         return r
 
     def __del__(self):
-        self.backend.close()
+        try:
+            self.backend.close()
+        except AttributeError:
+            pass
 
 class AbstractSampler(object):
     """
