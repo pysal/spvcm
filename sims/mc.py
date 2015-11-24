@@ -3,12 +3,14 @@ from dgp import _mkDelta
 import numpy as np
 import samplers as samp
 
-def gen_tests(df,W,M, outvar='Y', lowvar='X', upvar='Z'):
+def mktests(df,W,M, outvar='Y', lowvar='X', upvar='Z'):
     parvals = [x.split('_')[1:] for x in df.columns if x.startswith('Y')]
     Wm = W.full()[0]
     Mm = M.full()[0]
+    results = []
     for r,l in parvals:
-        yield (r,l,_mkrun(df,Wm,Mm,r,l, outvar, lowvar, upvar))
+        results.append((r,l,_mkrun(df,Wm,Mm,r,l, outvar, lowvar, upvar)))
+    return results
 
 def _mkrun(df, W,M,r,l, outvar = 'Y', lowvar = 'X', upvar = 'Z'):
     """

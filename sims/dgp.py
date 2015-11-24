@@ -145,7 +145,7 @@ def test_space(W,M,**kwargs):
     data = pd.DataFrame(np.hstack((X,Z)), columns=dcols)
     
     ycols = ['Y_{}_{}'.format(r,l) for r,l in configurations]
-    ydata = np.hstack([outcome(X,Z,Ws,Ms,Delta,r,l,**kwargs) for rl in configurations])
+    ydata = np.hstack([outcome(X,Z,Ws,Ms,Delta,r,l,**kwargs) for r,l in configurations])
     ydf = pd.DataFrame(ydata, columns=ycols)
 
     fulldata = pd.merge(ydf, data, left_index=True, right_index=True)

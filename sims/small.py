@@ -5,6 +5,8 @@ import pandas as pd
 import mc
 import multiprocessing as mp
 from six import iteritems as diter
+import os
+import analysis as a
 
 data, M,W = dgp.scenario(2,10)
 
@@ -22,11 +24,11 @@ for y in ycols:
 
 data.columns = yclean + dcols
 
-tester = mc.gen_tests(data, W,M)
+tester = mc.mktests(data, W,M)
 
 def fsample(x):
     r,l,s = x
-    s.sample(1000)
+    s.sample(10000)
     trx = np.vstack(s.trace.Stochastics['betas'])
     #trx = np.hstack((trx, np.hstack(s.trace.Stochastics['thetas']).T))
     trx = np.hstack((trx, 
@@ -40,9 +42,14 @@ def fsample(x):
     tdf = pd.DataFrame(trx)
     pstring = 'results/{}_{}'.format(r,l).replace('-', 'n')
     tdf.to_csv(pstring+'.csv'.format(r,l), index=False)
-    return x
+    tdf.drop(range(0,1000))
+    columns = ['beta0','beta1','beta2','beta3','gamma0','gamma1','rho','lambda','sigma_e','sigma_u']
+    mkplots(tdf.drop(1000), r, l, prefix=pstring)
+    del tdf, x
 
-q = fsample(next(tester))
+for x in tester:
+    print("testing {},{}".format(x[0], x[1]))
+    fsample(x)
 
 #P = mp.Pool(mp.cpu_count())
 #P.map(fsample, tester)
