@@ -62,6 +62,13 @@ def outcome(X, Z, W, M, Delta, rho, lam,
 
     y = (I - \rho W)^-1(X\beta + Z\gamma + \Delta\theta + (I - \lambda M)\eta +
     \epsilon
+
+    For default, the parameter values are:
+
+    etas ~ N(0,.5)
+    epsilons ~ N(0,.7)
+    Betas = -3, 6, 0, 2
+    Gammas = 5, -4
     """
     np.random.seed(seed=seed)
     N = W.shape[0]

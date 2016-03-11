@@ -201,12 +201,6 @@ class Gibbs(object):
         self.step += 1
         self.step %= len(self.samplers)
 
-    def __getattr__(self, v):
-        r = self.trace.Statics.get(v, self.trace.Derived.get(v, None))
-        if r is None:
-            r = self.trace.front(v)
-        return r
-
     def __del__(self):
         try:
             self.backend.close()
@@ -473,8 +467,11 @@ class Lambda(AbstractSampler):
             indexes = [i for i,x in enumerate(cdist) if x <= candidate]
             if indexes is not []:
                 sampling = False
-                idraw = max(indexes)
-                new_lambda = parvals[idraw] 
+                try:
+                    idraw = max(indexes)
+                    new_lambda = parvals[idraw] 
+                except ValueError:
+                    continue
         self.trace.update('lam', new_lambda)
         for name in self.exports:
             self.trace.Derived[name] = eval(name)
@@ -538,8 +535,11 @@ class Rho(AbstractSampler):
             indexes = [i for i,x in enumerate(cdist) if x <= candidate]
             if indexes is not []:
                 sampling = False
-                idraw = max(indexes)
-                new_rho = parvals[idraw] 
+                try:
+                    idraw = max(indexes)
+                    new_rho = parvals[idraw] 
+                except ValueError:
+                    continue #this is weird, but happens
         self.trace.update('rho', new_rho)
         for name in self.exports:
             self.trace.Derived[name] = eval(name)

@@ -42,11 +42,10 @@ def fsample(x):
     #columns += ['rho'] + ['lambda'] + ['sigma_e'] + ['sigma_u']
     tdf = pd.DataFrame(trx)
     pstring = 'results/{}_{}'.format(r,l).replace('-', 'n')
+    tdf.columns = ['beta0','beta1','beta2','beta3','gamma0','gamma1','rho','lambda','sigma_e','sigma_u']
     tdf.to_csv(pstring+'.csv'.format(r,l), index=False)
-    tdf.drop(range(0,1000))
-    columns = ['beta0','beta1','beta2','beta3','gamma0','gamma1','rho','lambda','sigma_e','sigma_u']
-    mkplots(tdf.drop(1000), r, l, prefix=pstring)
+    a.mkplots(tdf.drop(range(0,1000)), r, l, prefix=pstring)
     del tdf, x
 
-P = mp.Pool(mp.cpu_count())
-P.map(fsample, tester)
+while len(tester) > 0:
+    fsample(tester.pop())
