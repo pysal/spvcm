@@ -7,6 +7,21 @@ import matplotlib.pyplot as plt
 prec = {}
 pdict = {}
 def assert_Rarray_allclose(array, R_name):
+    """
+    Compares arrays between python and R
+
+    Arguments
+    ==========
+
+    array : np.ndarray
+            the source array in python to compare
+    R_name: str
+            the name of the array in R to compare to
+
+    Will raise an assertion error if the r array does not allclose with the
+    python array. 
+    
+    """
     N, J = array.shape
     for i in range(N):
         ri = i+1
@@ -15,6 +30,31 @@ def assert_Rarray_allclose(array, R_name):
         assert_allclose(Rvect, Pyvect, err_msg="Row {} not equal".format(i))
 
 def stepdown_precision(a1, a2, rtol = 7, err_msg=''):
+    """
+    This compares two matrices in R and Python, progressively lowering the
+    relative tolerance from a default value of .0000001, until the comparison
+    either fails (i.e. rtol is very large) or the comparison passes at some
+    reasonable precision.
+
+    Arguments
+    ==========
+
+    a1 : np.ndarray
+         the first array to be compared
+    a2 : np.ndarray
+         the second array to be compared
+    rtol : str
+         the starting relative tolerance
+    err_msg : str
+         the error message to output if/when the comparison fails. 
+
+
+    Returns
+    ========
+
+    some value within {1,.1,...,.0000001}, which reflects the relative precision
+    of the comparison being made. 1 implies the comparison has failed.
+    """
     while True:
         try:
             assert_allclose(a1, a2, rtol=10**(-1 * rtol), err_msg=err_msg)
@@ -24,6 +64,25 @@ def stepdown_precision(a1, a2, rtol = 7, err_msg=''):
     return rtol
 
 def to_R(array, name, keep_shape=True):
+    """
+    This is a cli equivalent of the %pushR function in the notebook. It sends an
+    array to R under the given name. 
+
+    Arguments
+    ==========
+    array   :   np.ndarray
+                the array to send to the R session
+    name    :   str
+                the desired name of the array in the R session 
+    keep_shape  : bool
+                  denotes whether the array needs to retain its shape, or if
+                  it's just a flat vector in both. Typically, this should be
+                  True. 
+
+    Returns
+    =======
+    an rpy2 object containing `array` in R. 
+    """
     #don't forget R is column-major...
     vect = "c({})".format(','.join([str(x) for x in array.T.flatten()]))
     R("{n} <- {v}".format(n=name, v=vect))
@@ -32,6 +91,22 @@ def to_R(array, name, keep_shape=True):
     return R("{n}".format(n=name))
 
 def test_Betas(s):
+    """
+    This compares the current sampler iteration to an equivalent iteration in R
+    for the HSAR model.
+
+    Arguments
+    ==========
+    s   : sampler
+          an instance of a gibbs sampler
+    
+    Returns
+    =======
+    (mprec,vprec)   : tuple
+                      the precisions at which the mean and variance are the
+                      same. Typically, if they're nearly equal, these should be
+                      somewhere between 10e-7 and 10e-4. 
+    """
     R('source("mcmc/betas.R")')
     R_mBetas, R_vBetas = R('mBetas'), R('vBetas')
     if s.step == 0:
@@ -52,6 +127,22 @@ def test_Betas(s):
     return mprec, vprec
 
 def test_Thetas(s):
+    """
+    This compares the current sampler iteration to an equivalent iteration in R
+    for the HSAR model.
+
+    Arguments
+    ==========
+    s   : sampler
+          an instance of a gibbs sampler
+    
+    Returns
+    =======
+    (mprec,vprec)   : tuple
+                      the precisions at which the mean and variance are the
+                      same. Typically, if they're nearly equal, these should be
+                      somewhere between 10e-7 and 10e-4. 
+    """
     R('source("mcmc/thetas.R")')
     R_mU, R_vU = R('mU'), R('vU')
     if s.step == 1:
@@ -70,6 +161,22 @@ def test_Thetas(s):
     return mprec, vprec
 
 def test_Sigma_e(s):
+    """
+    This compares the current sampler iteration to an equivalent iteration in R
+    for the HSAR model.
+
+    Arguments
+    ==========
+    s   : sampler
+          an instance of a gibbs sampler
+    
+    Returns
+    =======
+    deprec   : float
+               The relative tolerance at which the updated d_e value are
+               equivalent between  python and R. If passing, this should be 
+               somewhere between 10e-7 and 10e-4. 
+    """
     R('source("mcmc/sigma_e.R")')
     R_de = R('de')
     if s.step == 2:
@@ -87,6 +194,22 @@ def test_Sigma_e(s):
     return deprec
 
 def test_Sigma_u(s):
+    """
+    This compares the current sampler iteration to an equivalent iteration in R
+    for the HSAR model.
+
+    Arguments
+    ==========
+    s   : sampler
+          an instance of a gibbs sampler
+    
+    Returns
+    
+    buprec   : float
+               The relative tolerance at which the updated d_e value are
+               equivalent between  python and R. If passing, this should be 
+               somewhere between 10e-7 and 10e-4. 
+    """
     R('source("mcmc/sigma_u.R")')
     R_bu = R('bu')
     if s.step == 3:
@@ -104,6 +227,25 @@ def test_Sigma_u(s):
     return buprec
 
 def test_Rho(s, pdict=pdict):
+    """
+    This compares the current sampler iteration to an equivalent iteration in R
+    for the HSAR model.
+
+    Arguments
+    ==========
+    s   : sampler
+          an instance of a gibbs sampler
+    
+    Returns
+    =======
+    (pdfprec, cdfprec)  : tuple
+                          floats indicating the relative tolerance within which 
+                          the vectors containing the discretized pdf and cdf for rho 
+                          are equivalent. If this is smaller than .00001, that
+                          would mean that the two vectors are essentially the
+                          same. 
+    
+    """
     R('source("mcmc/rho.R")')
     if s.step == 4:
         s.__next__()
@@ -124,6 +266,24 @@ def test_Rho(s, pdict=pdict):
     return pdfprec, cdfprec
 
 def test_Lambda(s, pdict=pdict):
+    """
+    This compares the current sampler iteration to an equivalent iteration in R
+    for the HSAR model.
+
+    Arguments
+    ==========
+    s   : sampler
+          an instance of a gibbs sampler
+    
+    Returns
+    =======
+    (pdfprec, cdfprec)  : tuple
+                          floats indicating the relative tolerance within which 
+                          the vectors containing the discretized pdf and cdf for rho 
+                          are equivalent. If this is smaller than .00001, that
+                          would mean that the two vectors are essentially the
+                          same. 
+    """
     R('source("mcmc/lambda.R")')
     if s.step == 5:
         s.__next__()
@@ -146,6 +306,19 @@ def test_Lambda(s, pdict=pdict):
     return pdfprec, cdfprec
 
 def test_Iteration(s, plots=pdict, precision=prec):
+    """
+    This tests an entire iteration of the gibbs sampler in Python, pyHSAR,
+    against the code provided by Dong & Harris. 
+
+    Arguments
+    =========
+    s       :   sampler
+                a gibbs sampler as defined in samplers.py
+    plots   :   dict
+                a dictionary to store the trace plotting for each parameter value
+    prec    :   float
+                the starting precision to use for each comparison.
+    """
     precision['betas'].append(test_Betas(s))
     #print("beta precision: {}".format(precision['betas'][-1]))
     precision['thetas'].append(test_Thetas(s))
