@@ -74,3 +74,29 @@ def _mksparse(*args, **kwargs):
         return args[0]
     else:
         return args
+
+def time_gibbs(Gibbs, n=100):
+    """
+    time n iterations of gibbs sampler Gibbs
+    """
+    times = {k:[] for k in Gibbs.var_names}
+    for it in range(n*len(Gibbs.var_names)):
+        currname = Gibbs.var_names[it % len(Gibbs.var_names)]
+        s = time.time()
+        next(Gibbs)
+        times[currname].append(time.time() - s)
+    return times
+
+def inversion_sample(pdvec, grid=None):
+    """
+    the inversion sampling function required by samplers
+    """
+    if not np.allclose(pdvec.sum(), 1):
+        pdvec = pdvec / pdvec.sum()
+    cdvec = np.cumsum(pdvec)
+    while True:
+        rval = np.random.random()
+        topidx = np.sum(cdvec <= rval) -1
+        if topidx >= 0:
+            return grid[topidx]
+

@@ -21,3 +21,14 @@ def time_gibbs(Gibbs, n=100):
         times[currname].append(time.time() - s)
     return times
 
+def inversion_sample(pdvec, grid=None):
+    if not np.allclose(pdvec.sum(), 1):
+        pdvec = pdvec / pdvec.sum()
+    cdvec = np.cumsum(pdvec)
+    np.testing.assert_allclose(np.cumsum[-1], 1)
+    while True:
+        rval = np.random.random()
+        topidx = np.sum(cdvec <= rval) -1
+        if topidx >= 0:
+            return grid[topidx]
+
