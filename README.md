@@ -3,23 +3,7 @@ pyHSAR
 
 This is @ljwolf's work on estimating an HSAR in python. 
 
-I still need to:
-
-1.<s> implement full conditionals for
-    - lambda
-    - rho
-2. run the gibbs sampler to validate the results.</s>
-3. Run Monte Carlo estimation to check efficiency.
-4. Improve efficiency of matrix algebra in samplers. R is using dense algebra
-   always, but sparse matrices in weights. 
-5. move to PyMC by changing numpy ops to Theano ops. 
-
-If you'd like to see an example run of the sampler, check out
-`HSAR_Validation.ipynb`. I've included traces of the sampler, and comparison to
-the dong & harris paper. The notebook `Using the HSAR Sampler` may also be
-informative.
-
-Broadly speaking, the idea of the implementation is this:
+Broadly speaking, I've implemented
 
 1. A Gibbs sampler class that is composed of individual single-step samplers and a trace object.
 2. Single-step samplers that contain some `_cpost` full conditional posterior
@@ -29,22 +13,14 @@ Broadly speaking, the idea of the implementation is this:
         - Stochastics (things being sampled)
         - Statics (invariants throughout sampling)
         - Derived (quantities derived during sampling)
+4. a design-of-experiments setup in `./sims/dgp.py` and `./sims/mc.py` against
+   which we can test sensitivity and sampler results. 
 
 You construct the Gibbs sampler, which has all the requisite code for
 organizing, constructing, and conducting a run. The Trace should just be the
 private namespace inside of which results & computational memos are stored. Each
 sampler implements a `_cpost` method, and a `sample()` public method that calls
 the `_cpost()` method. 
-
-Validation, at this point, shows that some of the steps generate slightly
-different results. I've already squashed a few bugs (and, consequently, cannot
-wait for python 3's integrated [matrix multiplication operator,
-`@`](https://www.python.org/dev/peps/pep-0465/) as well
-as float division by default). 
-
-However, the results are similar enough as to warrant moving forward.
-Specifically, parameter values are recovered like Dong & Harris's example,
-`HSARDEMO.R`, and our variances are slightly smaller. 
 
 Monte Carlo simulation work is going in `sims/`. Right now, I'm working on a
 "small" and a "big" scenario, and I will (hopefully) run all of the MC tests

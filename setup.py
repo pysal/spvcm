@@ -9,6 +9,9 @@ from scipy import sparse as spar
 import validate as v
 
 def setup_HSAR():
+    """
+    This sets up the same example problem as in the Dong & Harris HSAR code. 
+    """
     data = pd.read_csv("./test.csv")
     y = data[['y']].values
     X = data[['x']].values
@@ -111,6 +114,10 @@ def setup_HSAR():
     return gSampler
 
 def grid_det(W, emin=-.99, emax=.99,step=.001):
+    """
+    This is a utility function to set up the grid of matrix determinants over a
+    range of spatial parameters for a given W. 
+    """
     grid = np.arange(emin, emax, step)
     if spar.issparse(W):
         I = spar.identity(W.shape[0])
