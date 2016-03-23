@@ -24,12 +24,12 @@ for y in ycols:
 
 data.columns = yclean + dcols
 
-tester = mc.mktests(data, W,M)
+tester = mc.mktests(data, W,M, repickle='overwrite')
 
 def fsample(x):
     print("testing {},{}".format(x[0], x[1]))
     r,l,s = x
-    s.sample(100000)
+    s.sample(1000)
     trx = np.vstack(s.trace.Stochastics['betas'])
     #trx = np.hstack((trx, np.hstack(s.trace.Stochastics['thetas']).T))
     trx = np.hstack((trx, 
@@ -41,7 +41,7 @@ def fsample(x):
     #columns += ['theta_{}'.format(i) for i in range(len(s.trace.Stochastics['thetas'][0].T))]
     #columns += ['rho'] + ['lambda'] + ['sigma_e'] + ['sigma_u']
     tdf = pd.DataFrame(trx)
-    pstring = 'results_meanshift/{}_{}'.format(r,l).replace('-', 'n')
+    pstring = 'pkltest/{}_{}'.format(r,l).replace('-', 'n')
     tdf.columns = ['beta0','beta1','beta2','beta3','gamma0','gamma1','rho','lambda','sigma_e','sigma_u']
     tdf.to_csv(pstring+'.csv'.format(r,l), index=False)
     a.mkplots(tdf.drop(range(0,1000)), r, l, prefix=pstring)

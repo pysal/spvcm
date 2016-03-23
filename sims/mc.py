@@ -42,9 +42,12 @@ def mktests(df,W,M, outvar='Y', lowvar='X', upvar='Z', repickle='overwrite'):
     Wm = W.full()[0]
     Mm = M.full()[0]
     results = []
-    if repickle == overwrite:
-       sh.rmtree('./.tmp_rhos.pkl')
-       sh.rmtree('./.tmp_lams.pkl')
+    if repickle == 'overwrite':
+        try:
+            sh.rmtree('./.tmp_rhos.pkl')
+            sh.rmtree('./.tmp_lams.pkl')
+        except OSError:
+            pass
     for r,l in parvals:
         results.append((r,l,_mkrun(df,Wm,Mm,r,l, outvar, lowvar, upvar, repickle)))
         if repickle == 'overwrite': #only rewrite first time, read otherwise.
@@ -118,8 +121,8 @@ def _mkrun(df, W,M,r,l, outvar = 'Y', lowvar = 'X', upvar = 'Z', repickle='overw
     Ij = np.identity(J)
     ##set up griddy gibbs
     if repickle == 'read':
-        rhos = np.load('.tmp_rhos.pkl')
-        lambdas = np.load('.tmp_lams.pkl')
+        rhos = np.load('./.tmp_rhos.pkl')
+        lambdas = np.load('./.tmp_lams.pkl')
     else:
         rhospace = np.arange(-.99, .99,.001)
         rhospace = rhospace.reshape(rhospace.shape[0], 1)
@@ -129,9 +132,9 @@ def _mkrun(df, W,M,r,l, outvar = 'Y', lowvar = 'X', upvar = 'Z', repickle='overw
         lamspace = lamspace.reshape(lamspace.shape[0], 1)
         lamdets = np.array([u.LU_logdet(Ij - lam*M) for lam in lamspace]).reshape(lamspace.shape)
         lambdas = np.hstack((lamspace, lamdets))
-        if repickle == overwrite:
-            lamdets.dump('./tmp_lams.pkl')
-            rhodets.dump('./tmp_rhodets.dump')
+        if repickle == 'overwrite':
+            lambdas.dump('./.tmp_lams.pkl')
+            rhos.dump('./.tmp_rhos.pkl')
     #invariants in rho sampling
     beta0 = u.lstsq(X, y).reshape(p, 1)
     e0 = y - np.dot(X, beta0)
