@@ -42,7 +42,7 @@ def varplot(df, name,truth, prefix=None):
     else:
         filepath = prefix + '_' + name + '.png'
     plt.savefig(filepath)
-    plt.clf()
+    plt.close('all')
 
 if __name__ == '__main__':
     import os

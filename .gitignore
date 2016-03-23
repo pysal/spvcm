@@ -2,3 +2,5 @@
 *.swp
 *.swo
 .ipynb_checkpoints
+*.png
+*.csv

@@ -8,7 +8,7 @@ from six import iteritems as diter
 import os
 import analysis as a
 
-data, M,W = dgp.scenario(9,45)
+data, M,W = dgp.scenario(10,50,rhostep=.4,lamstep=.4)
 
 ycols = [x for x in data.columns if x.startswith('Y')]
 dcols = [x for x in data.columns if not x.startswith('Y')]
@@ -29,7 +29,7 @@ tester = mc.mktests(data, W,M)
 def fsample(x):
     print("testing {},{}".format(x[0], x[1]))
     r,l,s = x
-    s.sample(10000)
+    s.sample(100000)
     trx = np.vstack(s.trace.Stochastics['betas'])
     #trx = np.hstack((trx, np.hstack(s.trace.Stochastics['thetas']).T))
     trx = np.hstack((trx, 
@@ -47,6 +47,6 @@ def fsample(x):
     a.mkplots(tdf.drop(range(0,1000)), r, l, prefix=pstring)
     del tdf, x
 
-while len(tester) > 0:
-    fsample(tester.pop())
-
+for test in tester:
+    print('sampling rho:{} lambda:{}'.format(test[0], test[1]))
+    fsample(test)

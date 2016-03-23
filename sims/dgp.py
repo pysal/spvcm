@@ -32,18 +32,17 @@ def design_matrix(N,J,Delta=None,seed=8879):
 
     np.random.seed(seed=seed)
 
-    x0 = np.ones(N) 
     x1 = np.random.random(size=N)*10 - 5 #continuous x \in [-10,10]
     x2 = np.random.random(size=N)*6 - 3 #continuous x \in [-3,3] won't be significant
     x3 = np.random.randint(3, size=N) - 1 #balanced categorical x \in {-1,0,1}
-    X = np.vstack((x0,x1,x2,x3)).T
+    X = np.vstack((x1,x2,x3)).T
     N2,p = X.shape #3 covariates + constant
     
-    z0 = np.ones(J) 
     z1 = np.random.random(size=J)*8 - 4 #continuous x \in [-8,8]
-    Z = np.vstack((z0,z1)).T
+    Z = z1.reshape(J,1)
     J2, q = Z.shape
-
+    
+    print(J2,q)
     assert N == N2
     assert J == J2
     
@@ -75,13 +74,13 @@ def outcome(X, Z, W, M, Delta, rho, lam,
     J = M.shape[0]
     W, M = _mksparse(W, M)
     if etas is None:
-        etas = np.random.normal(0,.5, size=J).reshape(J,1)
+        etas = np.random.normal(5.,.5, size=J).reshape(J,1)
     if epsilons is None:
-        epsilons = np.random.normal(0,.7,size=N).reshape(N,1)
+        epsilons = np.random.normal(-3.,.7,size=N).reshape(N,1)
     if Betas is None:
-        Betas = np.array([[-3.,6.,0.,2.]]).T
+        Betas = np.array([[6.,0.,2.]]).T
     if Gammas is None:
-        Gammas = np.array([[5.,-4.]]).T
+        Gammas = np.array([[-4.]]).T
 
     In = spar.identity(N) #will clobber Ipython history
     Ij = spar.identity(J) 

@@ -7,7 +7,7 @@ from warnings import warn
 import copy
 from trace import Trace
 from six import iteritems as diter
-from utils import logdet
+from utils import logdet, inversion_sample as isamp
 
 class Gibbs(object):
     """
@@ -419,8 +419,7 @@ class Lambda(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["M", "lambdas"]
-        self.exports = ['lambda_rval', 'parvals', 'norm_den', 'cdist', 'S_lambda',
-                'log_density']
+        self.exports = [ 'parvals', 'density', 'S_lambda']
 
     def _cpost(self):
         """
@@ -457,21 +456,7 @@ class Lambda(AbstractSampler):
 
         density = np.exp(log_density)
         
-        norm_den = density/density.sum()
-        cdist = np.cumsum(norm_den)
-        
-        sampling = True
-        while sampling:
-            lambda_rval = np.random.random()
-            candidate = lambda_rval * norm_den.sum()
-            indexes = [i for i,x in enumerate(cdist) if x <= candidate]
-            if indexes is not []:
-                sampling = False
-                try:
-                    idraw = max(indexes)
-                    new_lambda = parvals[idraw] 
-                except ValueError:
-                    continue
+        new_lambda = isamp(density, grid=parvals) 
         self.trace.update('lam', new_lambda)
         for name in self.exports:
             self.trace.Derived[name] = eval(name)
@@ -486,8 +471,7 @@ class Rho(AbstractSampler):
     def __init__(self, trace):
         self.trace = trace
         self.required = ["e0", "ed", "e0e0", "eded", "e0ed", "Delta_u", "X", "rhos"]
-        self.exports = ['rho_rval', 'parvals', 'norm_den', 'cdist', 'S_rho',
-                'log_density']
+        self.exports = ['parvals', 'density', 'S_rho']
 
     def _cpost(self):
         """
@@ -526,20 +510,7 @@ class Rho(AbstractSampler):
 
         density = np.exp(log_density)
 
-        norm_den = density/density.sum()
-        cdist = np.cumsum(norm_den)
-        sampling = True
-        while sampling:
-            rho_rval = np.random.random()
-            candidate = rho_rval * norm_den.sum()
-            indexes = [i for i,x in enumerate(cdist) if x <= candidate]
-            if indexes is not []:
-                sampling = False
-                try:
-                    idraw = max(indexes)
-                    new_rho = parvals[idraw] 
-                except ValueError:
-                    continue #this is weird, but happens
+        new_rho = isamp(density, grid=parvals)
         self.trace.update('rho', new_rho)
         for name in self.exports:
             self.trace.Derived[name] = eval(name)
