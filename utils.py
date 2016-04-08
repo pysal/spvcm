@@ -4,22 +4,61 @@ from numpy import linalg as nla
 from scipy.sparse import linalg as spla
 from pysal.spreg.opt import requires, simport
 from six import iteritems as diter
+from functools import wraps
 import time
 __all__ = ['grid_det']
+PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 
-class Namespace(object):
+
+class Namespace(dict):
     """
-    This is a proxy class to add stuff to help with composition
+    This is a proxy class to add stuff to help with composition. It will expose
+    dictionary methods directly to the class's __dict__, meaning it will work
+    like a dot-access dictionary. 
     """
     def __init__(self, **kwargs):
+        collisions = [k in PUBLIC_DICT_ATTS for k in kwargs.keys()]
+        collisions = [k for k,collide in zip(kwargs.keys(), collisions) if collide]
+        if len(collisions) > 0:
+            raise TypeError('Passing {} to Namespace will overwrite builtin dict methods. Bailing...'.format(collisions))
         self.__dict__.update(kwargs)
-    
+        self._dictify()
+
+    def _dictify(self):
+        """
+        hack to make Namespace pass as if it were a dict by passing methods
+        straight through to its own dict
+        """
+        for method in PUBLIC_DICT_ATTS:
+            if method is 'clear':
+                continue #don't want to break the namespace
+            self.__dict__[method] = eval('self.__dict__.{}'.format(method))
+
+    @property
+    def _data(self):
+        return {k:v for k,v in diter(self.__dict__) if k not in PUBLIC_DICT_ATTS}
+
     def __repr__(self):
-        innards = ', '.join(['{}:{}'.format(k,v) for k,v in diter(self.__dict__)])
+        innards = ', '.join(['{}:{}'.format(k,v) for k,v in diter(self._data)])
         return '{%s}' % innards
     
     def __getitem__(self, val):
+        """
+        passthrough to self.__dict__[val]
+        """
         return self.__dict__[val]
+    
+    def __setitem__(self, key, item):
+        self.__dict__[key] = item
+    
+    def __delitem__(self, key):
+        del self.__dict__[key]
+        _dictify()
+
+    def clear(self):
+        not_builtins = {k for k in self.keys() if k not in PUBLIC_DICT_ATTS}
+        for key in not_builtins:
+            del self.__dict__[key]
 
 def splogdet(M):
     """
@@ -67,7 +106,7 @@ def inversion_sample(pdvec, grid):
     if not np.allclose(pdvec.sum(), 1):
         pdvec = pdvec / pdvec.sum()
     cdvec = np.cumsum(pdvec)
-    np.testing.assert_allclose(np.cumsum[-1], 1)
+    np.testing.assert_allclose(cdvec[-1], 1)
     while True:
         rval = np.random.random()
         topidx = np.sum(cdvec <= rval) -1

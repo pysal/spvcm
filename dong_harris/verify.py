@@ -67,8 +67,8 @@ def parameters(gridspec, gridfile, Wmatrix):
     2. computes the log determinant for each value of gridspec
     3. computes the log determinant for np.arange(*gridspec)
     """
-    if len(gridspec) == 0 and gridfile is not '':
-        promise = lambda : np.load(gridfile) #use closure to lazy load 
+    if gridspec is None and gridfile is not '':
+        promise = lambda : grid_from_file(gridfile) #use closure to lazy load 
     elif isinstance(gridspec, np.ndarray):
         Warn("Computing grid of log determinants on demand may take a while")
         return lambda : grid_det(Wmatrix, grid=gridspec) 
@@ -82,3 +82,13 @@ def parameters(gridspec, gridfile, Wmatrix):
     return promise 
 
 
+def grid_from_file(gridfile):
+    """
+    read and verify a sampling grid from a numpy file
+    """
+    data = np.load(gridfile)
+    if data.shape[1] == 2:
+        data = data.T
+    elif data.shape[0] != 2:
+        raise UserWarning('Grid read from {} is not correctly formatted. The grid must be a (2,k) array, where k is the number of gridpoints.')
+    return data

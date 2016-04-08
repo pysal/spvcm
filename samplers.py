@@ -1,4 +1,5 @@
 from __future__ import division
+from .utils import Namespace as NS
 
 class Gibbs(object):
     """
@@ -28,7 +29,7 @@ class Gibbs(object):
         """
         Take one step within a cycle of the sampler
         """
-        self.sample(steps=1)
+        self.sample(steps=1, cycles=0)
 
     @property
     def cycles(self):
@@ -50,7 +51,7 @@ class Gibbs(object):
                     if False, will step until one full cycle has completed from
                     the current position. 
         """
-        for i in range(len(samplers) - step):
+        for i in range(len(self.samplers) - step):
             self.step()
         if finish:
             assert self.position == 0
@@ -70,10 +71,15 @@ class Gibbs(object):
         """
         to_take = steps + cycles * len(self.samplers)
         while to_take > 0:
+            if self._verbose:
+                print('starting sampling cycle {}'.format(self.cycles))
             for smp in self.samplers:
+                if to_take <= 0:
+                    break
                 smp()
                 self.trace[smp.__name__].append(self._state[smp.__name__])
                 self.steps += 1
+                to_take -= 1
 
     @property
     def front(self, *names):
@@ -83,7 +89,7 @@ class Gibbs(object):
         """
         if names is ():
             names = self.var_names
-        return {name:self._state[name] for name in names}
+        return NS(**{name:self._state[name] for name in names})
 
     @property
     def current(self, *names):
@@ -96,7 +102,7 @@ class Gibbs(object):
             vals[name] = current[name]
         if names is ():
             names = self.var_names
-        return {name:vals[name] for name in names}
+        return NS(**{name:vals[name] for name in names})
 
     @property
     def previous(self, *names):
@@ -106,7 +112,7 @@ class Gibbs(object):
         """
         if names is ():
             names = self.var_names
-        return {name: self.trace[name] for name in names}
+        return NS(**{name: self.trace[name][self.cycles-1] for name in names})
 
 class AbstractSampler(object):
     """
