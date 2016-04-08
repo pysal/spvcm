@@ -18,7 +18,8 @@ class Betas(AbstractSampler):
     These are the covariate parameters in a Hierarchical Simultaneous
     Autoregressive Model
     """
-    def __init__(self, state=None, initial=None):
+    def __init__(self, state=None, initial=None, name=None):
+        super(Betas, self).__init__(state=state, name=name) 
         self.requires = ['XtX', 'In', 'W', 'invT0', 'y', 'X', 'T0M0', 'Delta', 'p']
         self.exports = ['Ay', 'A', 'v_betas', 'm_betas']
         self.state = state
@@ -30,37 +31,24 @@ class Betas(AbstractSampler):
                 Warn('Initial default guess was not found in state')
         self.initial = initial
 
-    def _cpost(self, state=None):
+    def _cpost(self):
         """
         Full conditional posterior for Beta, as defined in Equation 26 of Dong
         & Harris (2014).
         """
-        if state is None:
-            state = self.state
-        for name in self.requires:
-            try:
-                exec("{n} = state['{n}']".format(n=name))
-            except KeyError as KError:
-                err = "Variable {} not found in state".format(name)
-                err += " at step {}".format(self.__class__)
-                raise KeyError(err)
-            except TypeError:
-                err = "No state found for sampler. Please set the state by running sampler.state = globals() or equivalent."
-                raise TypeError(err)
+        st = self.state._state
         pt = self.state.front #grab most current sampled values
-        VV = XtX / pt['Sigma_e'] + invT0
-        v_betas = la.inv(VV) #conditional posterior variance matrix
-        A = In - pt['SAC_Lower'] * W
-        Ay = np.dot(A, y)
-        Delta_u = np.dot(Delta, pt['Thetas']) #recall, HSAR.R labels Delta from paper as Z
-        lprod = np.dot(X.T, (Ay - Delta_u)/pt['Sigma_e']) + T0M0.reshape(p,1)
-        m_betas = np.dot(v_betas, lprod) #conditional posterior mean
-        new_betas = np.random.multivariate_normal(m_betas.flatten(), v_betas)
-        new_betas = new_betas.reshape(pt['Betas'].shape)
-        self.state['Betas'] = new_betas #update in place
-        for name in self.exports:
-            state[name] = eval(name)
-        return state
+        VV = st.XtX / pt['Sigma_e'] + st.invT0
+        st.v_betas = la.inv(VV) #conditional posterior variance matrix
+        st.A = np.asarray(st.In - pt['SAC_Lower'] * st.W)
+        st.Ay = np.dot(st.A, st.y)
+        Delta_u = np.dot(st.Delta, pt['Thetas']) #recall, HSAR.R labels Delta from paper as Z
+        lprod = np.dot(st.X.T, (st.Ay - Delta_u)/pt['Sigma_e'])
+        lprod += st.T0M0.reshape(st.p, 1)
+        st.m_betas = np.dot(st.v_betas, lprod) #conditional posterior mean
+        new_betas = np.random.multivariate_normal(st.m_betas.flatten(), st.v_betas)
+        st.Betas  = new_betas.reshape(pt['Betas'].shape)
+        return st.Betas
 
 class Thetas(AbstractSampler):
     """
@@ -69,7 +57,8 @@ class Thetas(AbstractSampler):
     These are the "upper-level" random effects for a Hierarchical Simulatenous
     Autoregressive Model
     """
-    def __init__(self, state=None, initial=None):
+    def __init__(self, state=None, initial=None, name=None):
+        super(Thetas, self).__init__(state=state, name=name) 
         self.required = ['Ij', 'M', 'X', 'y', 'J', 'Ay', 'Delta']
         self.exports = ['Xb', 'B', 'm_u', 'v_u']
         self.state = state
@@ -116,7 +105,8 @@ class Sigma_e(AbstractSampler):
     This is the variance for the "lower-level" errors in a Hierarhical
     Simulatenous Autoregressive model. 
     """
-    def __init__(self, state=None, initial=2):
+    def __init__(self, state=None, initial=2, name=None):
+        super(Sigma_e, self).__init__(state=state, name=name) 
         self.requires = ['Delta', 'Ay', 'Xb', 'ce', 'd0']
         self.exports = ['Delta_u', 'de']
         self.state = state
@@ -156,7 +146,8 @@ class Sigma_u(AbstractSampler):
     This is the variance for the "upper-level" random effects in a Hierarchical
     Simulatenous Autoregressive model. 
     """
-    def __init__(self, state=None, initial=2):
+    def __init__(self, state=None, initial=2, name=None):
+        super(Sigma_u, self).__init__(state=state, name=name) 
         self.requires = ['B', 'b0', 'au']
         self.exports = ['bu']
         self.state = state
@@ -193,7 +184,8 @@ class SAC_Upper(AbstractSampler):
     This is the "upper-level" error spatial dependence coefficient in a Hierarchical
     Simultaneous Autoregressive model
     """
-    def __init__(self, state=None, initial=.5):
+    def __init__(self, state=None, initial=.5, name=None):
+        super(SAC_Upper, self).__init__(state=state, name=name) 
         self.requires = ["M", "SAC_upper"]
         self.exports = [ 'parvals', 'density', 'S_sac_upper']
         self.state = state
@@ -246,7 +238,8 @@ class SAC_Lower(AbstractSampler):
     This is the "lower-level" response spatial dependence coefficient in a
     Hierarchical Simultaneous Autoregressive model
     """
-    def __init__(self, state=None, initial=.5):
+    def __init__(self, state=None, initial=.5, name=None):
+        super(SAC_Lower, self).__init__(state=state, name=name) 
         self.requires = ["e0", "ed", "e0e0", "eded", "e0ed", "Delta_u", "X", "SAC_Lowers"]
         self.exports = ['parvals', 'density', 'S_sac_lower']
         self.state = state

@@ -7,9 +7,12 @@ class Gibbs(object):
     def __init__(self, *samplers, **kwargs):
         self.samplers = list(samplers)
         self._state = kwargs.pop('state', globals())
-        self.trace = {k:None for k in self.var_names}
+        self.trace = {k:[self._state[k]] for k in self.var_names}
         self.steps = 0
     
+    def __getitem__(self, val):
+        return self._state[val]
+
     @property
     def var_names(self):
         return [type(s).__name__ for s in self.samplers]
@@ -113,10 +116,13 @@ class AbstractSampler(object):
     The main idea is that classes that inherit from this will define some
     _cpost function that draws from a conditional posterior. 
     """
-    def __init__(self, state=None, clean=False, **params):
+    def __init__(self, state=None,name=None, **params):
         if state == None:
             state = globals()
-        self._state = state
+        self.state = state
+        if name is None:
+            name = self.__class__.__name__
+        self.__name__ = name
 
     def __next__(self, *args, **kwargs):
         """

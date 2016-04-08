@@ -1,9 +1,15 @@
 import numpy as np
 from pysal.spreg.utils import spmultiply, sphstack, spmin, spmax, spdot
+from ..utils import grid_det
 from pysal.spreg.diagnostics import constant_check
 from warnings import warn as Warn
 
 def weights(W,M, transform):
+    """
+    This tries to transform a pysal spatial weights object into being
+    row-standardized. It warns if the objects do not support transformation. 
+
+    """
     try:
         W.transform = transform
         M.transform = transform
@@ -11,28 +17,34 @@ def weights(W,M, transform):
         Warn("Weights objects do not support transformation. Proceeding without transforming weights.", UserWarning)
     return W, M
 
-def covariates(X,Z,W,M):
+def covariates(X,Z,W,M,Delta):
+    """
+    This 
+
+    1. checks if the upper-level covariate is not supplied
+    2. checks if the upper-level covariate contains a constant
+    3. adds a constant to the upper-level covariates if it has no constant
+    4. checks if the lower-level covariate contains a constant
+    5. adds a constant to the lower-level covariate if it has no constant
+    6. if upper-level is supplied in a (J,q) matrix of covariates, 
+       translate them down to an (n,q) matrix.
+    """
     if Z is None:
         Warn('No upper-level covariates supplied. Setting default to upper-level fixed effects', UserWarning)
         Z = np.ones((M.n, 1))
-    else:
-        if constant_check(Z):
-            raise UserWarning("Z array cannot contain a constant vector; constant will be added automatically")
-        else:
-            Z = sphstack(np.ones((M.n, 1)), Z) 
     if constant_check(X):
         raise UserWarning("X array cannot contain a constant vector; constant will be added automatically")
     else:
         X = sphstack(np.ones((W.n, 1)), X)
+    
     J, q = Z.shape
     n, p = X.shape
-    if J == W.n:
-        w = "Z was provided as {} by {}, projecting down to {} by {}"
-        Warn(w.format(J, q, n, q))
-        Z = spdot(Delta, Z)
     return X,Z
 
 def Delta_members(Delta, membership, N, J):
+    """
+    This computes and verifies a Delta or membership vector. 
+    """
     if Delta is None and membership is None:
         raise UserWarning("No Delta matrix nor membership classification provided. Refusing to arbitrarily assign units to upper-level regions.")
     elif membership is None:
@@ -47,12 +59,24 @@ def Delta_members(Delta, membership, N, J):
         raise UserWarning("Both Delta and Membership vector provided. Please pass only one or the other.")
     return Delta, membership
 
-def parameters(rangetup, gridfile, Wmatrix):
-    if len(rangetup) == 0 and gridfile is not '':
-        promise = lambda : np.load(gridfile) #use closure to lazy compute 
-    elif len(rangetup) == 3:
-        Warn("Computing grid of log determinants on demand. This may take a while")
-        promise = lambda : grid_det(Wmatrix, *rangetup) #again, promise to Base_HSAR
+def parameters(gridspec, gridfile, Wmatrix):
+    """
+    This returns a lambda that, when evaluated either 
+    
+    1. loads the log determinant grid from gridfile
+    2. computes the log determinant for each value of gridspec
+    3. computes the log determinant for np.arange(*gridspec)
+    """
+    if len(gridspec) == 0 and gridfile is not '':
+        promise = lambda : np.load(gridfile) #use closure to lazy load 
+    elif isinstance(gridspec, np.ndarray):
+        Warn("Computing grid of log determinants on demand may take a while")
+        return lambda : grid_det(Wmatrix, grid=gridspec) 
+    elif len(gridspec) == 3:
+        Warn("Computing grid of log determinants on demand may take a while")
+        parmin, parmax, parstep = gridspec
+        promise = lambda : grid_det(Wmatrix, parmin=parmin, parmax=parmax,
+                                    parstep=parstep) #again, promise to Base_HSAR
     else:
         raise UserWarning("Length of parameter slice incorrect while no grid file is provided. A range tuple must be (minimum, maximum, step).")
     return promise 

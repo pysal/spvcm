@@ -3,18 +3,43 @@ import numpy as np
 from numpy import linalg as nla
 from scipy.sparse import linalg as spla
 from pysal.spreg.opt import requires, simport
+from six import iteritems as diter
 import time
 __all__ = ['grid_det']
+
+class Namespace(object):
+    """
+    This is a proxy class to add stuff to help with composition
+    """
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+    
+    def __repr__(self):
+        innards = ', '.join(['{}:{}'.format(k,v) for k,v in diter(self.__dict__)])
+        return '{%s}' % innards
+    
+    def __getitem__(self, val):
+        return self.__dict__[val]
 
 def splogdet(M):
     """
     compute the log determinant via an appropriate method. 
     """
+    redo = False
     if spar.issparse(M):
         LU = spla.splu(M)
         ldet = np.sum(np.log(np.abs(LU.U.diagonal())))
     else:
-        ldet = la.slogdet(M)
+        sgn, ldet = la.slogdet(M)
+        if np.isinf(ldet) or sgn is 0:
+            Warn('Dense log determinant via numpy.linalg.slogdet() failed!')
+            redo = True
+        if sgn not in [-1,1]:
+            Warn("Drastic loss of precision in numpy.linalg.slogdet()!")
+            redo = True
+    if redo:
+        Warn("Please pass convert to a sparse weights matrix. Trying sparse determinant...", UserWarning)
+        ldet = splogdet(spar.csc_matrix(M))
     return ldet
 
 def speye(i, sparse=True):
@@ -22,7 +47,7 @@ def speye(i, sparse=True):
     constructs a square identity matrix according to i, either sparse or dense
     """
     if sparse:
-        return SP.identity(i)
+        return spar.identity(i)
     else:
         return np.identity(i)
 
@@ -33,7 +58,7 @@ def speye_like(matrix):
     if matrix.shape[0] != matrix.shape[1]:
         raise UserWarning("Matrix is not square")
     else:
-        return speye(matrix.shape[0], sparse=SP.issparse(matrix))
+        return speye(matrix.shape[0], sparse=spar.issparse(matrix))
 
 def inversion_sample(pdvec, grid):
     """
@@ -49,12 +74,13 @@ def inversion_sample(pdvec, grid):
         if topidx >= 0:
             return grid[topidx]
 
-def grid_det(W, emin=-.99, emax=.99,step=.001):
+def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
     """
     This is a utility function to set up the grid of matrix determinants over a
     range of spatial parameters for a given W. 
     """
-    grid = np.arange(emin, emax, step)
+    if grid is None:
+        grid = np.arange(parmin, parmax, parstep)
     logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
     grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
     return grid
@@ -72,10 +98,11 @@ if T is not None:
     
     _theano_det = th.function([W, param], det, allow_input_downcast=True) 
 
-    def theano_grid_det(W, emin=-.99, emax=.99, step=.001):
+    def theano_grid_det(W, parmin=-.99, parmax=.99, parstep=.001, grid=None):
         """
         This is a theano version of the gridded determinant function
         """
-        grid = np.arange(emin, emax, step)
+        if grid is None:
+            grid = np.arange(parmin, parmax, parstep)
         logdets = [_theano_det(W, par) for par in grid]
         return np.vstack((grid, np.array(logdets).reshape(grid.shape)))
