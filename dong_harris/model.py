@@ -33,8 +33,8 @@ def _keep(k,v, *matches):
 class Base_HSAR(Gibbs):
     def __init__(self, y, X, W, M, Z, Delta, SAC_Upper_grid, SAC_Lower_grid, 
                  cycles=1000, steps=0, **tuning):
-        
-        X = sphstack(X, spdot(Delta, Z))
+        if Z is not None:
+            X = sphstack(X, spdot(Delta, Z))
         del Z
 
         # dimensions
@@ -53,7 +53,7 @@ class Base_HSAR(Gibbs):
         self._state.update(initial_values)
         super(Base_HSAR, self).__init__(*samplers, state=self._state)
         
-        #self.sample(cycles=cycles, steps=steps)
+        self.sample(cycles=cycles, steps=steps)
 
     def _setup_data(self, **tuning):
         """
@@ -141,7 +141,7 @@ class HSAR(Base_HSAR):
         try:
             assert _N == N
         except AssertionError:
-            raise AssertionError('Number of lower-level observations does not match between X ({}) and W ({})'.format(_N, N))
+            raise UserWarning('Number of lower-level observations does not match between X ({}) and W ({})'.format(_N, N))
 
         if sparse:
             Wmat = W.sparse
@@ -153,7 +153,7 @@ class HSAR(Base_HSAR):
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
         
         # Data
-        X, Z = verify.covariates(X, Z, W, M, Delta)
+        X = verify.covariates(X, W)
         
         # Gridded SAR/ER
         if (err_grid is None) & (err_gridfile is ''):
@@ -165,7 +165,8 @@ class HSAR(Base_HSAR):
 
         self._verbose = verbose
         super(HSAR, self).__init__(y, X, Wmat, Mmat, Z, 
-                                   Delta, err_prom(), sar_prom(), **tuning)
+                                   Delta, err_prom(), sar_prom(), 
+                                   cycles=cycles, steps=steps, **tuning)
 
 if __name__ == '__main__':
     import pandas as pd

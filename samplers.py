@@ -8,7 +8,7 @@ class Gibbs(object):
     def __init__(self, *samplers, **kwargs):
         self.samplers = list(samplers)
         self._state = kwargs.pop('state', globals())
-        self.trace = {k:[self._state[k]] for k in self.var_names}
+        self.trace = NS(**{k:[self._state[k]] for k in self.var_names})
         self.steps = 0
     
     def __getitem__(self, val):
@@ -51,7 +51,11 @@ class Gibbs(object):
                     if False, will step until one full cycle has completed from
                     the current position. 
         """
-        for i in range(len(self.samplers) - step):
+        if finish:
+            to_take = len(self.samplers - self.position)
+        else:
+            to_take = len(self.samplers)
+        for _ in range(to_take):
             self.step()
         if finish:
             assert self.position == 0
@@ -72,14 +76,16 @@ class Gibbs(object):
         to_take = steps + cycles * len(self.samplers)
         while to_take > 0:
             if self._verbose:
-                print('starting sampling cycle {}'.format(self.cycles))
-            for smp in self.samplers:
-                if to_take <= 0:
-                    break
-                smp()
-                self.trace[smp.__name__].append(self._state[smp.__name__])
-                self.steps += 1
-                to_take -= 1
+                if self.position is 0:
+                    print('starting sampling cycle {}'.format(self.cycles))
+                if self._verbose > 1:
+                    current_name = self.samplers[self.position].__name__
+                    print('\tsampling from {}'.format(current_name))
+            smp = self.samplers[self.position] #sampler in current position
+            smp() #call is sample
+            self.trace[smp.__name__].append(self._state[smp.__name__]) 
+            self.steps += 1
+            to_take -= 1
 
     @property
     def front(self, *names):

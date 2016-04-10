@@ -17,29 +17,19 @@ def weights(W,M, transform):
         Warn("Weights objects do not support transformation. Proceeding without transforming weights.", UserWarning)
     return W, M
 
-def covariates(X,Z,W,M,Delta):
+def covariates(X,W):
     """
     This 
 
-    1. checks if the upper-level covariate is not supplied
-    2. checks if the upper-level covariate contains a constant
-    3. adds a constant to the upper-level covariates if it has no constant
-    4. checks if the lower-level covariate contains a constant
-    5. adds a constant to the lower-level covariate if it has no constant
-    6. if upper-level is supplied in a (J,q) matrix of covariates, 
-       translate them down to an (n,q) matrix.
+    1. checks if the lower-level covariate contains a constant
+    2. adds a constant to the lower-level covariate if it has no constant
     """
-    if Z is None:
-        Warn('No upper-level covariates supplied. Setting default to upper-level fixed effects', UserWarning)
-        Z = np.ones((M.n, 1))
     if constant_check(X):
         raise UserWarning("X array cannot contain a constant vector; constant will be added automatically")
     else:
         X = sphstack(np.ones((W.n, 1)), X)
     
-    J, q = Z.shape
-    n, p = X.shape
-    return X,Z
+    return X
 
 def Delta_members(Delta, membership, N, J):
     """
@@ -61,7 +51,7 @@ def Delta_members(Delta, membership, N, J):
 
 def parameters(gridspec, gridfile, Wmatrix):
     """
-    This returns a lambda that, when evaluated either 
+    This returns a lambda that, when evaluated, either 
     
     1. loads the log determinant grid from gridfile
     2. computes the log determinant for each value of gridspec
@@ -80,7 +70,6 @@ def parameters(gridspec, gridfile, Wmatrix):
     else:
         raise UserWarning("Length of parameter slice incorrect while no grid file is provided. A range tuple must be (minimum, maximum, step).")
     return promise 
-
 
 def grid_from_file(gridfile):
     """
