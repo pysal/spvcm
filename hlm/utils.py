@@ -133,7 +133,7 @@ if T is not None:
     param = T.dscalar('param')
     I = T.identity_like(W)
     svd = tla.svd(I - param * W)
-    det = T.abs_(svd[1]).log().sum()
+    det = T.sum(T.log(T.abs_(svd[1])))
     
     _theano_det = th.function([W, param], det, allow_input_downcast=True) 
 

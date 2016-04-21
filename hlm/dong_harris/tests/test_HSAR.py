@@ -1,7 +1,7 @@
 import pysal as ps
 import unittest
 import numpy as np
-from pysal.spreg.hlm import HSAR, Base_HSAR
+from hlm import HSAR, Base_HSAR
 from pysal.common import RTOL
 
 RTOL *= 10
