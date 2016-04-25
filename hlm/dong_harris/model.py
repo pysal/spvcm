@@ -10,7 +10,7 @@ from pysal.spreg.utils import sphstack, spdot
 from . import verify
 import types
 
-from ..samplers import AbstractSampler, Gibbs
+from ..abstracts import AbstractSampler, Gibbs
 from ..utils import grid_det, Namespace as NS
 try:
     from ..utils import theano_grid_det
@@ -93,7 +93,7 @@ class Base_HSAR(Gibbs):
         e0ed = spdot(e0.T, ed)
 
         rval = {k:v for k,v in diter(dict(locals())) if k is not 'tuning'}
-        return locals(), tuning
+        return rval, tuning
 
     def _setup_samplers(self, **start):
         samplers = []

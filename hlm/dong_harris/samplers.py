@@ -7,7 +7,7 @@ from six import iteritems as diter
 from pysal.spreg.diagnostics import constant_check
 from pysal.spreg.utils import spmultiply, sphstack, spmin, spmax, spdot
 
-from ..samplers import AbstractSampler
+from ..abstracts import AbstractSampler
 from ..utils import inversion_sample
 
 __all__ = ['Betas', 'Thetas', 'Sigma_e', 'Sigma_u', 'SAC_Upper', 'SAC_Lower']
