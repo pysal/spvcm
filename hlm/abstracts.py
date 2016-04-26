@@ -135,7 +135,7 @@ class AbstractSampler(object):
         if name is None:
             name = self.__class__.__name__
         self.__name__ = name
-
+    
     def __next__(self, *args, **kwargs):
         """
         get another draw from the sampling function

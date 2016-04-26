@@ -1,5 +1,6 @@
 import numpy as np
 from numpy import linalg as la
+import scipy.linalg as scla
 from scipy import stats
 from warnings import warn as Warn
 from six import iteritems as diter
@@ -37,7 +38,7 @@ class Betas(AbstractSampler):
         st = self.state._state #alias for shared state of sampler
         fr = self.state.front #alias for the most recent parameter values
         VV = st.XtX / fr.Sigma_e + st.invT0
-        st.v_betas = la.inv(VV) #conditional posterior variance matrix
+        st.v_betas = scla.inv(VV) #conditional posterior variance matrix
         st.A = np.asarray(st.In - fr.SAC_Lower * st.W)
         st.Ay = spdot(st.A, st.y)
         st.Delta_u = spdot(st.Delta, fr.Thetas) #recall, HSAR.R mislabels Delta->Z
@@ -46,6 +47,23 @@ class Betas(AbstractSampler):
         st.m_betas = spdot(st.v_betas, lprod) #conditional posterior mean
         new_betas = np.random.multivariate_normal(st.m_betas.flatten(), st.v_betas)
         st.Betas  = new_betas.reshape(fr.Betas.shape)
+        return st.Betas
+
+    def _cpost_chol(self):
+        st = self.state._state #alias for shared state of sampler
+        fr = self.state.front #alias for the most recent parameter values
+        VV = st.XtX / fr.Sigma_e + st.invT0
+        st.v_betas = scla.inv(VV) #conditional posterior variance matrix
+        st.A = np.asarray(st.In - fr.SAC_Lower * st.W)
+        st.Ay = spdot(st.A, st.y)
+        st.Delta_u = spdot(st.Delta, fr.Thetas) #recall, HSAR.R mislabels Delta->Z
+        lprod = spdot(st.X.T, (st.Ay - st.Delta_u)/fr.Sigma_e)
+        lprod += st.T0M0.reshape(st.p, 1)
+        st.m_betas = spdot(st.v_betas, lprod) #conditional posterior mean
+        new_betas = spdot(np.random.normal(0, 1, size=st.p).reshape(1,st.p), 
+                           scla.cholesky(st.v_betas))
+        new_betas += st.m_betas.T
+        st.Betas = new_betas
         return st.Betas
 
 class Thetas(AbstractSampler):
@@ -75,11 +93,27 @@ class Thetas(AbstractSampler):
         st.B = np.asarray(st.Ij - fr.SAC_Upper * st.M) #upper-level laplacian
         tmpv_u = spdot(st.Delta.T, st.Delta)/fr.Sigma_e 
         tmpv_u += spdot(st.B.T, st.B)/fr.Sigma_u
-        st.v_u = la.inv(tmpv_u) #conditional posterior variance matrix
+        st.v_u = scla.inv(tmpv_u) #conditional posterior variance matrix
         st.Xb = spdot(st.X, fr.Betas.T) #uses recent copy of betas
         lprod = spdot(st.Delta.T, st.Ay - st.Xb) / fr.Sigma_e
         st.m_u = spdot(st.v_u, lprod) #conditional posterior means
         new_u = np.random.multivariate_normal(st.m_u.flatten(), st.v_u)
+        st.Thetas = new_u.reshape(fr.Thetas.shape)
+        return st.Thetas
+
+    def _cpost_chol(self):
+        st = self.state._state
+        fr = self.state.front
+        st.B = np.asarray(st.Ij - fr.SAC_Upper * st.M) #upper-level laplacian
+        tmpv_u = spdot(st.Delta.T, st.Delta)/fr.Sigma_e 
+        tmpv_u += spdot(st.B.T, st.B)/fr.Sigma_u
+        st.v_u = scla.inv(tmpv_u) #conditional posterior variance matrix
+        st.Xb = spdot(st.X, fr.Betas.T) #uses recent copy of betas
+        lprod = spdot(st.Delta.T, st.Ay - st.Xb) / fr.Sigma_e
+        st.m_u = spdot(st.v_u, lprod) #conditional posterior means
+        new_u = spdot(np.random.normal(0,1,size=st.J).reshape(st.J,1).T,
+                      scla.cholesky(st.v_u))
+        new_u += st.m_u.T
         st.Thetas = new_u.reshape(fr.Thetas.shape)
         return st.Thetas
 
@@ -195,7 +229,7 @@ class SAC_Lower(AbstractSampler):
         iota = np.ones_like(parvals)
        
        #have to compute eu-related parameters
-        beta_u, resids, rank, svs = la.lstsq(st.X, st.Delta_u)
+        beta_u, resids, rank, svs = scla.lstsq(st.X, st.Delta_u)
         eu = st.Delta_u - spdot(st.X, beta_u)
         eueu = spdot(eu.T, eu)
         e0eu = spdot(st.e0.T, eu)

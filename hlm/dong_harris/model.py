@@ -52,6 +52,9 @@ class Base_HSAR(Gibbs):
         initial_values = {k.__class__.__name__:k.initial for k in samplers}
         self._state.update(initial_values)
         super(Base_HSAR, self).__init__(*samplers, state=self._state)
+        if tuning.pop('method', 'mvn') in ('cholesky', 'cho', 'chol'):
+            self.samplers[0]._cpost = self.samplers[0]._cpost_chol
+            self.samplers[1]._cpost = self.samplers[1]._cpost_chol
         
         self.sample(cycles=cycles, steps=steps)
 
@@ -107,9 +110,12 @@ class HSAR(Base_HSAR):
                  Z=None, Delta=None, membership=None,
                  err_grid=None, err_gridfile='', sar_grid=None, sar_gridfile='', 
                  sparse=True, transform='r', cycles=1000, steps=0,
-                 verbose=False, **tuning):
+                 verbose=False, method='choleksy', **tuning):
         """
-        The Dong-Harris multilevel HSAR model
+        The Dong-Harris multilevel HSAR model, which is a spatial autoregressive
+        model with two levels. The first level has a simultaneous
+        spatially-autoregressive effect. The second level has a
+        spatially-correlated error term.
 
         Parameters
         ----------
