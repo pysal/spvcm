@@ -31,7 +31,7 @@ def _keep(k,v, *matches):
     return keep
 
 class Base_HSAR(Gibbs):
-    def __init__(self, y, X, W, M, Z, Delta, SAC_Upper_grid, SAC_Lower_grid, 
+    def __init__(self, y, X, W, M, Z, Delta, Lambda_grid=None, Rho_grid=None, 
                  cycles=1000, steps=0, **tuning):
         if Z is not None:
             X = sphstack(X, spdot(Delta, Z))
@@ -52,7 +52,9 @@ class Base_HSAR(Gibbs):
         initial_values = {k.__class__.__name__:k.initial for k in samplers}
         self._state.update(initial_values)
         super(Base_HSAR, self).__init__(*samplers, state=self._state)
+        
         if tuning.pop('method', 'mvn') in ('cholesky', 'cho', 'chol'):
+            Warn('using cholesky sampling')
             self.samplers[0]._cpost = self.samplers[0]._cpost_chol
             self.samplers[1]._cpost = self.samplers[1]._cpost_chol
         
@@ -66,7 +68,7 @@ class Base_HSAR(Gibbs):
         In = np.identity(self._state.N)
         Ij = np.identity(self._state.J)
         ##Prior specs
-        M0 = tuning.pop('M0', np.zeros(self._state.p))
+        M0 = tuning.pop('M0', np.zeros((self._state.p, 1)))
         T0 = tuning.pop('T0', np.identity(self._state.p) * 100)
         a0 = tuning.pop('a0', .01)
         b0 = tuning.pop('b0', .01)
@@ -75,6 +77,7 @@ class Base_HSAR(Gibbs):
 
         ##fixed matrix manipulations for MCMC loops
         XtX = spdot(self._state.X.T, self._state.X)
+        XtXi = la.inv(XtX)
         invT0 = la.inv(T0)
         T0M0 = spdot(invT0, M0)
 
@@ -110,7 +113,7 @@ class HSAR(Base_HSAR):
                  Z=None, Delta=None, membership=None,
                  err_grid=None, err_gridfile='', sar_grid=None, sar_gridfile='', 
                  sparse=True, transform='r', cycles=1000, steps=0,
-                 verbose=False, method='choleksy', **tuning):
+                 verbose=False, method='mvn', **tuning):
         """
         The Dong-Harris multilevel HSAR model, which is a spatial autoregressive
         model with two levels. The first level has a simultaneous
@@ -171,10 +174,12 @@ class HSAR(Base_HSAR):
 
         self._verbose = verbose
         super(HSAR, self).__init__(y, X, Wmat, Mmat, Z, 
-                                   Delta, err_prom(), sar_prom(), 
+                                   Delta, 
+                                   Lambda_grid = err_prom(),
+                                   Rho_grid = sar_prom(), 
                                    cycles=cycles, steps=steps, **tuning)
 
-if __name__ == '__main__':
+def _setup():
     import pandas as pd
 
     data = pd.read_csv('./test.csv')
@@ -191,3 +196,4 @@ if __name__ == '__main__':
     Z = np.ones(W_low.n).reshape((W_upper.n, 1))
     
     test = HSAR(y, X, W_low, W_up, Z=Z, membership=membership)
+    return data, y, X, W_low, W_up, membership, Z, test
