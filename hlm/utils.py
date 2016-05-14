@@ -69,7 +69,7 @@ def splogdet(M):
         LU = spla.splu(M)
         ldet = np.sum(np.log(np.abs(LU.U.diagonal())))
     else:
-        sgn, ldet = la.slogdet(M)
+        sgn, ldet = nla.slogdet(M)
         if np.isinf(ldet) or sgn is 0:
             Warn('Dense log determinant via numpy.linalg.slogdet() failed!')
             redo = True

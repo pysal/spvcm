@@ -1,6 +1,7 @@
 from __future__ import division
 from .utils import Namespace as NS
 from scipy import stats
+import numpy as np
 
 class Gibbs(object):
     """
@@ -180,9 +181,9 @@ class Metropolis_Mixin(object):
                         the log pdf using proposal.logpdf.
     """
     def __init__(self, default_move=1, adapt_rate=1, 
-                 lower_bound=.4, upper_bound=.6, proposal=stats.normal):
-        self.accepted = 0
-        self._current_logp = self._logp(self.initial)
+                 lower_bound=.4, upper_bound=.6, proposal=stats.norm):
+        self.n_accepted = 0
+        self._current_logp = None
         self._move_size= default_move
         self._adapt_rate = adapt_rate
         self._lower = lower_bound
@@ -201,25 +202,28 @@ class Metropolis_Mixin(object):
 
         log(A) = log(P(new)) - log(P(current)) + (log(f(current | new)) - log(f(new | current)))
         """
-        ll_now = self._current_logp
+        if self._current_logp is not None:
+            ll_now = self._current_logp
+        else:
+            ll_now = self._logp(value)
         new, forward_logp, backward_logp = self._propose(value)
+        print(new)
         ll_new = self._logp(new) 
 
         diff = ll_now - ll_new
-        diff += (forward_logp - backward_logp)
+        #diff += (forward_logp - backward_logp)
         
-        A = np.exp(diff)
+        ratio = np.exp(diff)
 
         uval = np.random.random()
        
-        pp = np.min(1, A)
+        pp = np.min((1, ratio))
         
         if uval < pp:
-           returnval = new_val
-            self.accepted += 1
+           returnval = new
+           self.n_accepted += 1
         else:
             returnval = value
-            self.accepted += 1
         self._adapt()
 
         return returnval
@@ -228,7 +232,7 @@ class Metropolis_Mixin(object):
         """
         This should return the log of the pdf being sampled. 
         """
-        return 1
+        raise NotImplementedError
 
     def _propose(self, value, move_size=None, distribution=None, symmetric=False):
         """
@@ -281,6 +285,6 @@ class Metropolis_Mixin(object):
         self.accept_rate = self.n_accepted / (self.state.cycles + 1)
         
         if self.accept_rate < self._lower:
-            self._move_size /= self._adapt_rate 
+            self._move_size *= self._adapt_rate 
         elif self.accept_rate > self._upper:
-            self._move_size *= self._adapt_rate
+            self._move_size /= self._adapt_rate

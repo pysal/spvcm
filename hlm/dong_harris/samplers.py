@@ -6,10 +6,10 @@ from warnings import warn as Warn
 from six import iteritems as diter
 
 from pysal.spreg.diagnostics import constant_check
-from pysal.spreg.utils import spmultiply, sphstack, spmin, spmax, spdot, splogdet
+from pysal.spreg.utils import spmultiply, sphstack, spmin, spmax, spdot
 
-from ..abstracts import AbstractSampler
-from ..utils import inversion
+from ..abstracts import AbstractSampler, Metropolis_Mixin
+from ..utils import inversion, splogdet
 
 __all__ = ['Betas', 'Thetas', 'Sigma2_e', 'Sigma2_u', 'Lambda', 'Rho']
 
@@ -41,7 +41,6 @@ class Betas(AbstractSampler):
         """
         st = self.state._state #alias for shared state of sampler
         fr = self.state.front #alias for the most recent parameter values
-        in equation 31 of Dong & Harris (2014). 
         VV = st.XtX / fr.Sigma2_e + st.invT0
         st.v_betas = scla.inv(VV) #conditional posterior variance matrix
         st.A = np.asarray(st.In - fr.Rho * st.W)
@@ -232,25 +231,27 @@ class Rho(AbstractSampler, Metropolis_Mixin):
     Hierarchical Simultaneous Autoregressive model
     """
     def __init__(self, state=None, initial=.5, name=None, method='grid',
-                 default_move=1, adapt_rate=1, lower_bound=.4, upper_bound=.6,
-                 proposal=stats.normal):
-        AbstractSampler.__init__(state=state, name=name) 
+                 default_move=1., adapt_rate=1., lower_bound=.4, upper_bound=.6,
+                 proposal=stats.norm):
+        AbstractSampler.__init__(self, state=state, name=name) 
         if initial is None:
             initial = .5
         self.initial = initial
         if method in ['mh', 'metropolis']:
-            Metropolis_Mixin.__init__(default_move = default_move,
+            Metropolis_Mixin.__init__(self, default_move = default_move,
                                       adapt_rate=adapt_rate,
                                       lower_bound=lower_bound, upper_bound=.6)
-            self._cpost = _mh
+            self._cpost = self._mh
+        else:
+            self._cpost = self._grid_inversion
 
     def _mh(self):
         """
         A metropolis-hastings sampling strategy similar to the one employed in
         Lacombe & McIntyre (2015)
         """
-        st.Rho = self._metropolis(st.Rho) 
-        return st.Rho
+        self.state._state.Rho = self._metropolis(self.state._state.Rho) 
+        return self.state._state.Rho
 
     def _grid_inversion(self):
         """
@@ -292,14 +293,20 @@ class Rho(AbstractSampler, Metropolis_Mixin):
         kernel = self._logp_kernel(val)
         return splogdet(st.In - val * st.W) + kernel
 
-    def _propose(self, current, adapt_step=1):
+    def _propose(self, current):
         """
         compute proposal & log transition probabilities for sampler at a given
         value.
         """
-        new = stats.truncnorm.rvs(-1, 1, loc=current, scale=1*adapt_step)
-        forward = stats.truncnorm.logpdf(new, -1, 1, loc=current, scale=1*adapt_step)
-        backward = stats.truncnorm.logpdf(current, -1,1, loc=new, scale=1*adapt_step)
+        a = (-1 - current) / self._move_size
+        b = (1  - current) / self._move_size
+        new = stats.truncnorm.rvs(a, b, loc=current, scale=self._move_size)
+        new_a = (-1 - new)/ self._move_size
+        new_b = (1 - new)/ self._move_size
+        forward = stats.truncnorm.logpdf(new, a, b, 
+                                         loc=current, scale=self._move_size)
+        backward = stats.truncnorm.logpdf(current, new_a,new_b, 
+                                         loc=new, scale=self._move_size)
         return new, forward, backward
 
          
