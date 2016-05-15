@@ -69,7 +69,7 @@ def splogdet(M):
         LU = spla.splu(M)
         ldet = np.sum(np.log(np.abs(LU.U.diagonal())))
     else:
-        sgn, ldet = la.slogdet(M)
+        sgn, ldet = nla.slogdet(M)
         if np.isinf(ldet) or sgn is 0:
             Warn('Dense log determinant via numpy.linalg.slogdet() failed!')
             redo = True
@@ -99,7 +99,7 @@ def speye_like(matrix):
     else:
         return speye(matrix.shape[0], sparse=spar.issparse(matrix))
 
-def inversion_sample(pdvec, grid):
+def inversion(pdvec, grid):
     """
     sample from a probability distribution vector, according to a grid of values
     """
@@ -112,6 +112,52 @@ def inversion_sample(pdvec, grid):
         topidx = np.sum(cdvec <= rval) -1
         if topidx >= 0:
             return grid[topidx]
+
+def metropolis(sampler, value):
+    """
+    sample using metropolis-hastings. This is done by accepting a move from some
+    current parameter value to some new parameter value with the probability:
+
+    A = P(new) / P(current) * f(current | new) / f(new | current)
+
+    where the first term is the ratio of the pdfs new and current, and f is the
+    distribution of the proposal. In logs, this is:
+
+    log(A) = log(P(new)) - log(P(current)) + (log(f(current | new)) - log(f(new | current)))
+    """
+    ll_now = sampler._current
+    new, forward_logp, backward_logp = sampler._propose(value)
+    ll_new = sampler._logp(new) 
+
+    diff = ll_now - ll_new
+    diff += (forward_logp - backward_logp)
+    
+    A = np.exp(diff)
+
+    uval = np.random.random()
+   
+    pp = np.min(1, A)
+    
+    if uval < pp:
+       returnval = new_val
+       accepted = True
+    else:
+        returnval = value
+        accepted = False
+    
+    return returnval, accepted
+
+def _adapt(sampler, value):
+    """
+    This should be a property of the proposal, not of the metropolis step.
+    """
+    accept_rate = self.acc / (self.state.steps + 1)
+    
+    if ar < .4:
+        self.step /= 1.1
+    elif ar > .6:
+        self.step *= 1.1
+    return returnval, accepted
 
 def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
     """

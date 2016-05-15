@@ -1,0 +1,131 @@
+\documentclass{article}
+\usepackage{graphicx}
+
+\title{Sampling Shortcuts in Two Gibbs Samplers for Spatial Models}
+\author{Levi John Wolf}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+In reviewing and improving implementations of the spatial hierarchical models,
+I noticed errors in the statistical assumptions of the inversion and M-H
+samplers used in Dong \& Harris (2014) and Lacombe \& McIntyre (2016),
+respectively. These issues only affect sampling of the spatial parameters, but
+will, in general, affect the performance of the entire sampler. I hope the
+following discussion illuminates these issues so they are avoided in future.
+
+\subsection{Dong \& Harris Gridded Gibbs}
+
+Dong \& Harris (2014) use a gridded inversion sampling method they ascribe to
+the Bayesian spatial probit sampler in Smith \& LeSage (2004).  In
+short, the implementation error is unique to Dong \& Harris's implementation of
+the sampler, and affects samples of both spatial parameters. 
+
+The sampler must evaluate a density for the lower-level spatial
+parameter, $\rho$, with the following non-standard form: \[ \rho | \beta,
+\Theta, \sigma^2_e, \sigma^2_u, \lambda \sim |A| \exp\left\{-(2\sigma^2_e)^{-1} \left(Ay - X\beta -
+\Delta\Theta\right)'\left(Ay - X\beta - \Delta\Theta\right) \right\}\]
+In this notation, y$y$ is the response variable, $A$ is the standard Laplacian
+matrix, $I - \rho \mathbf{W}$, $X$ contains all lower- \& upper-level exogenous
+covariates, $\Delta$ is the matrix that categorizes all lower-level observations
+into upper-level units, and $\Theta$ is the vector of spatially correlated
+random effects. Let us call the probability density function shown above
+$\mathcal{D}$, and let its cumulative distribution be $\Phi$. 
+
+To sample $\rho \sim \mathcal{D}$ the log determinant, $\ln(|A|)$, is first
+evaluated over a grid of possible $\rho$ values.  This allows precomputation of
+the log determinant, possibly improving performance. Then, the kernel of the
+density shown above is evaluated at grid points. With this vector of
+probabilities, $\Phi$ is approximated using a simple cumulative sum. The next
+draw of $\rho$, called $\rho_{new}$, conditional on the rest of the sampler
+state is:
+\[\rho_{new} | (\ldots) = \hat{\Phi}^{-1}(u) \ \ \ \ \ \ u \sim Unif(0,1) \]
+In theory, this generates consistent estimates of $\rho$ when the grid values
+approximate all of $\mathcal{D}$ well. Smith \& LeSage (2004) correctly suggest
+evaluating $\mathcal{D}$ over a grid with boundaries determined by the minimal
+and maximal eigenvalues, $[e^{-1}_{min}, e^{-1}_{max}]$, and such an
+approximation should result in consistent estimates of parameters. 
+
+Instead of this, Dong \& Harris (2014) evaluate the grid over a domain of
+[-1,1].  Intuitively, this is reasonable, because the largest possible $\rho$
+value for a row-standardized weights matrix is 1. In addition,$\rho$ values less
+than $-1$ imply strange behavior, and $\rho$ is usually constrained to be above
+$-1$ because of this.
+
+But, in the case where $e^{-1}_{min} < -1$, this choice of bounds will introduce
+positive bias into the estimates. This is relatively easy to show. Let the
+maximal lower value of $\rho$ according to the distribution above be $l$ and the
+upper bound be $r$. Then, the total probability Dong \& Harris (2014) \textit{do
+not} sample from is: 
+\[ \Phi(l) + (1 - \Phi(r)) \]
+A simple example is shown in Figure \ref{fig:pdf}, with a vastly simplified
+$\mathcal{D}$. The corresponding $\Phi$ are shown in \ref{fig:cdf}. The two are
+related through the truncated probability:
+\[ \Phi^*(x) = \frac{\Phi(x)}{1 - (\Phi(l) + (1 - \Phi(r))} \]
+Thus, for a given $u$ draw in an inversion sampling step, $\Phi^*(x)$ will be
+larger than $\Phi(x)$. This is also shown in \ref{fig:cdf} by the difference in
+the new parameter values for a given draw of $u$..
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{example_pdf.png}
+  \caption{Arbitrary probability density function for $\rho_new$ with some
+  amount of probability residing outside of the inversion sampling range}
+  \label{fig:pdf}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{cdf_bias.png}
+  \caption{True cumulative distribution function $\Phi$ (black) and truncated distribution
+  function $\Phi^*$ (red). At almost every possible inversion sample, a draw from the red truncated
+  cumulative density function will dominate the black true cumulative density
+  function. Parameters estimated using $\Phi^*{-1}$ will exhibit positive bias.}
+  \label{fig:cdf}
+\end{figure}
+
+\subsection{Lacombe \& McIntyre Metropolis} 
+
+Lacombe \& McIntyre's provided code exhibits a similar domain-based issue in
+their Metropolis-Hastings implementation. The simplest Metropolis-Hastings
+deployment samples $\rho_{new}$ from $\mathcal{D}$ by adding some random step
+$\delta$ to $\rho$. The random shock is often a normally-distrubuted innovation
+with variance adapted according to the rejection rate. Then, this new value is
+accepted with the acceptance probability:
+\[ A = min \left\{ 1, \frac{\mathcal{D}(\rho_new)}{\mathcal{D}(\rho)}
+\frac{f(\rho | \rho_{new})}{f(\rho_{new} | \rho)} \right\} \] 
+for a symmetric proposal distribution in continuous space, the farthest right
+term, sometimes called the ``proposal scaling factor,'' cancels out, since the
+probability of moving from $\rho$ to $\rho_{new}$ is the same as the probability
+of moving from $\rho_{new}$ to $\rho$. Then, to finish the draw, another uniform 
+random test value like the $u$ discussed above is drawn. The proposed
+$\rho_{new}$ is accepted if $A > u$ and $\rho_{new}$ is assigned to $\rho$, or
+is rejected if $A < u$ and the sampler proceeds. 
+
+The M-H deployment in Lacombe \& McIntyre's code adds a seemingly reasonable
+innovation: if $\rho + \delta$ is outside [-1,1], simply draw another $\delta$
+in the same step. If $\rho_{new}$ is not in a valid part of the domain, it will
+be rejected anyway. By re-drawing $\delta$ until $\rho_{new}$ is valid, we will
+accept more $\rho$, and reduce the waste of drawing and rejecting many invalid
+$\rho_{new}$. 
+
+Unfortunately, this means the scaling factor is not one, since
+$f(\rho|\rho_{new}) \neq f(\rho_{new} | \rho)$. This becomes clear when you
+consider what happens to the set of valid transitions when $\rho$ is very close
+to the boundary. If $\rho_{new}$ is \textit{away} from the boundary, its
+truncation will be different, resulting in a different probability of moving
+from $\rho_{new}$ to rho (i.e. $f(\rho_new | \rho)$. That is, the probability of
+moving from $\rho$ to $\rho_{new}$ will be higher than that of $\rho_{new}$ to
+$\rho$, since the truncation is much more aggressive at $\rho$ than
+$\rho_{new}$. 
+
+This may or may not induce consistent bias in the parameter estimates, but can
+cause unexpected behavior in the sampling routine. While this statistical
+incorrectness is in pursuit of sampling efficiency, it is unlikely that the
+efficiency gained is really \textit{worth} it, since the gains to efficiency
+(and statistical incorrectness) only occur when the sampler takes many draws
+close to the boundary. In addition, since Lacombe \& McIntyre also assume
+spatial parameters below -1 are invalid \textit{prima facie}, it is likely that
+this compounds with the same issue noted above. 
+
+\end{document}
