@@ -10,7 +10,7 @@ from pysal.spreg.utils import sphstack, spdot
 from . import verify
 import types
 
-from ..abstracts import AbstractSampler, Gibbs
+from ..abstracts import Abstract_Step, Gibbs
 from ..utils import grid_det, Namespace as NS
 try:
     from ..utils import theano_grid_det
@@ -31,8 +31,8 @@ def _keep(k,v, *matches):
     return keep
 
 class Base_HSAR(Gibbs):
-    def __init__(self, y, X, W, M, Z, Delta, Lambda_grid=None, Rho_grid=None, 
-                 cycles=1000, steps=0, **tuning):
+    def __init__(self, y, X, W, M, Z, Delta, Lambda_grid=None, Rho_grid=None,
+                 n_samples=1000, **tuning):
         if Z is not None:
             X = sphstack(X, spdot(Delta, Z))
         del Z
@@ -53,12 +53,26 @@ class Base_HSAR(Gibbs):
         self._state.update(initial_values)
         super(Base_HSAR, self).__init__(*samplers, state=self._state)
         
-        if tuning.pop('method', 'mvn') in ('cholesky', 'cho', 'chol'):
-            Warn('using cholesky sampling')
-            self.samplers[0]._cpost = self.samplers[0]._cpost_chol
-            self.samplers[1]._cpost = self.samplers[1]._cpost_chol
-        
-        self.sample(cycles=cycles, steps=steps)
+        effect_method = tuning.pop('effect_method', 'mvn')
+        if effect_method.lower().startswith('cho'):
+            Warn('using cholesky sampling for Betas & Thetas')
+            self.samplers[0].method='cho'
+            self.samplers[1].method='cho'
+        else:
+            Warn('using multivariate-normal sampling for Betas & Thetas')
+            self.samplers[0].method='mvn'
+            self.samplers[1].method='mvn'
+        spatial_method = tuning.pop('spatial_method', 'grid')
+        if spatial_method.lower().startswith('met'):
+            Warn('using metropolis-hastings sampling for spatial parameters')
+            self.samplers[-1].method = 'met'
+            self.samplers[-2].method = 'met'
+        else:
+            Warn('using gridded gibbs sampling for spatial parameters')
+            self.samplers[-1].method = 'grid'
+            self.samplers[-2].method = 'grid'
+
+        self.sample(n_samples)
 
     def _setup_data(self, **tuning):
         """
@@ -105,15 +119,15 @@ class Base_HSAR(Gibbs):
         samplers = []
         for S in _HSAR_SAMPLERS:
             guess = start.pop(S.__name__, None)
-            samplers.append(S(state=self, initial=guess))
+            samplers.append(S(sampler=self, initial=guess))
         return samplers, start
 
 class HSAR(Base_HSAR):
     def __init__(self, y, X, W, M, 
                  Z=None, Delta=None, membership=None,
                  err_grid=None, err_gridfile='', sar_grid=None, sar_gridfile='', 
-                 sparse=True, transform='r', cycles=1000, steps=0,
-                 verbose=False, method='mvn', **tuning):
+                 sparse=True, transform='r', n_samples=1000,
+                 verbose=False, **tuning):
         """
         The Dong-Harris multilevel HSAR model, which is a spatial autoregressive
         model with two levels. The first level has a simultaneous
@@ -177,7 +191,7 @@ class HSAR(Base_HSAR):
                                    Delta, 
                                    Lambda_grid = err_prom(),
                                    Rho_grid = sar_prom(), 
-                                   cycles=cycles, steps=steps, **tuning)
+                                   n_samples=n_samples, **tuning)
 
 def _setup():
     import pandas as pd
