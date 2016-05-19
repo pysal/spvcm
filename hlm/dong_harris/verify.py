@@ -25,7 +25,8 @@ def covariates(X,W):
     2. adds a constant to the lower-level covariate if it has no constant
     """
     if constant_check(X):
-        raise UserWarning("X array cannot contain a constant vector; constant will be added automatically")
+        Warn("X array should not contain a constant vector;"
+             " constant will be added automatically")
     else:
         X = sphstack(np.ones((W.n, 1)), X)
     
