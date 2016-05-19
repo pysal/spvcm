@@ -120,17 +120,20 @@ def speye_like(matrix):
 
 spidentity_like = speye_like
 
-def speigen_range(matrix, retry=True):
+def speigen_range(matrix, retry=True, coerce=True):
     """
     Construct the eigenrange of a potentially sparse matrix. 
     """
     if spar.issparse(matrix):
-        emax = spla.eigs(matrix, k=1, which='LR')
-        emin = spla.eigs(matrix, k=1, which='SR')
+        emax = spla.eigs(matrix, k=1, which='LR')[0]
+        emin = spla.eigs(matrix, k=1, which='SR')[0]
+        if coerce:
+            emax = emax.astype(float)
+            emin = emin.astype(float)
     else:
         try:
             eigs = nla.eigvals(matrix)
-            emin, emax = float(eigs.min()), float(eigs.max())
+            emin, emax = eigs.min().astype(float), eigs.max().astype(float)
         except Exception as e:
             Warn('Dense eigenvector computation failed!')
             if retry:

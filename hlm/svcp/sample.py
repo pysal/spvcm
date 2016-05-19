@@ -3,7 +3,7 @@ import scipy.stats as stats
 import scipy.linalg as scla
 import numpy as np
 from warnings import warn as Warn
-from util import nexp_weights
+from .utils import nexp_weights
 
 def H(phi, pwds, method=nexp_weights):
     """

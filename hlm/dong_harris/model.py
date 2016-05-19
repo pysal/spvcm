@@ -62,9 +62,9 @@ class Base_HSAR(object):
                  lambda_grid=None, rho_grid=None, 
                  #spatial parameter metropolis sample configurations
                  rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
-                 rho_proposal=stats.normal, rho_adapt_step=1.001,
+                 rho_proposal=stats.norm, rho_adapt_step=1.001,
                  lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6, 
-                 lambda_proposal=stats.normal, lambda_adapt_step=1.001,
+                 lambda_proposal=stats.norm, lambda_adapt_step=1.001,
                  #analytical parameter options:
                  betas_overwrite_covariance=True,
                  thetas_overwrite_covariance=True):
@@ -253,7 +253,7 @@ class HSAR(Base_HSAR):
     def __init__(self, y, X, W, M, 
                  Z=None, Delta=None, membership=None,
                  #data options:
-                 sparse=True, transform='r', n_samples=1000, verbose=False
+                 sparse=True, transform='r', n_samples=1000, verbose=False,
                  **options):
         """
         The Dong-Harris multilevel HSAR model, which is a spatial autoregressive

@@ -1,12 +1,12 @@
 from __future__ import division
-from sample import sample, H
-from scipy import stats 
-import scipy.linalg as scla
-from scipy.spatial import distance as d
 import numpy as np
 import copy
-from ..util import Namespace as NS 
-from util import explode
+import scipy.linalg as scla
+from scipy import stats 
+from scipy.spatial import distance as d
+from .utils import explode
+from .sample import sample, H
+from ..utils import Namespace as NS 
 
 class SVCP(object):
     """

@@ -1,2 +1,2 @@
-from dong_harris import *
-from svcp import SVCP
+from .dong_harris import Base_HSAR, HSAR
+from .svcp import SVCP
