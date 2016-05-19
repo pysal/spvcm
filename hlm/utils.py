@@ -6,6 +6,7 @@ from pysal.spreg.opt import requires, simport
 from six import iteritems as diter
 from functools import wraps
 import time
+from warnings import warn as Warn
 __all__ = ['grid_det']
 PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 
@@ -60,6 +61,21 @@ class Namespace(dict):
         for key in not_builtins:
             del self.__dict__[key]
 
+def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
+    """
+    This is a utility function to set up the grid of matrix determinants over a
+    range of spatial parameters for a given W. 
+    """
+    if grid is None:
+        grid = np.arange(parmin, parmax, parstep)
+    logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
+    grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
+    return grid
+
+####################
+# MATRIX UTILITIES #
+####################
+
 def splogdet(M):
     """
     compute the log determinant via an appropriate method. 
@@ -76,6 +92,7 @@ def splogdet(M):
         if sgn not in [-1,1]:
             Warn("Drastic loss of precision in numpy.linalg.slogdet()!")
             redo = True
+        ldet = sgn*ldet
     if redo:
         Warn("Please pass convert to a sparse weights matrix. Trying sparse determinant...", UserWarning)
         ldet = splogdet(spar.csc_matrix(M))
@@ -90,6 +107,8 @@ def speye(i, sparse=True):
     else:
         return np.identity(i)
 
+spidentity = speye
+
 def speye_like(matrix):
     """
     constructs an identity matrix depending on the input dimension and type
@@ -99,95 +118,26 @@ def speye_like(matrix):
     else:
         return speye(matrix.shape[0], sparse=spar.issparse(matrix))
 
-def inversion(pdvec, grid):
+spidentity_like = speye_like
+
+def speigen_range(matrix, retry=True):
     """
-    sample from a probability distribution vector, according to a grid of values
+    Construct the eigenrange of a potentially sparse matrix. 
     """
-    if not np.allclose(pdvec.sum(), 1):
-        pdvec = pdvec / pdvec.sum()
-    cdvec = np.cumsum(pdvec)
-    np.testing.assert_allclose(cdvec[-1], 1)
-    while True:
-        rval = np.random.random()
-        topidx = np.sum(cdvec <= rval) -1
-        if topidx >= 0:
-            return grid[topidx]
-
-def metropolis(sampler, value):
-    """
-    sample using metropolis-hastings. This is done by accepting a move from some
-    current parameter value to some new parameter value with the probability:
-
-    A = P(new) / P(current) * f(current | new) / f(new | current)
-
-    where the first term is the ratio of the pdfs new and current, and f is the
-    distribution of the proposal. In logs, this is:
-
-    log(A) = log(P(new)) - log(P(current)) + (log(f(current | new)) - log(f(new | current)))
-    """
-    ll_now = sampler._current
-    new, forward_logp, backward_logp = sampler._propose(value)
-    ll_new = sampler._logp(new) 
-
-    diff = ll_now - ll_new
-    diff += (forward_logp - backward_logp)
-    
-    A = np.exp(diff)
-
-    uval = np.random.random()
-   
-    pp = np.min(1, A)
-    
-    if uval < pp:
-       returnval = new_val
-       accepted = True
+    if spar.issparse(matrix):
+        emax = spla.eigs(matrix, k=1, which='LR')
+        emin = spla.eigs(matrix, k=1, which='SR')
     else:
-        returnval = value
-        accepted = False
-    
-    return returnval, accepted
-
-def _adapt(sampler, value):
-    """
-    This should be a property of the proposal, not of the metropolis step.
-    """
-    accept_rate = self.acc / (self.state.steps + 1)
-    
-    if ar < .4:
-        self.step /= 1.1
-    elif ar > .6:
-        self.step *= 1.1
-    return returnval, accepted
-
-def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
-    """
-    This is a utility function to set up the grid of matrix determinants over a
-    range of spatial parameters for a given W. 
-    """
-    if grid is None:
-        grid = np.arange(parmin, parmax, parstep)
-    logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
-    grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
-    return grid
-
-_, T = simport('theano.tensor')
-_, th = simport('theano')
-_, tla = simport('theano.tensor.nlinalg')
-
-if T is not None:
-    W = T.dmatrix('W')
-    param = T.dscalar('param')
-    I = T.identity_like(W)
-    svd = tla.svd(I - param * W)
-    det = T.sum(T.log(T.abs_(svd[1])))
-    
-    _theano_det = th.function([W, param], det, allow_input_downcast=True) 
-
-    def theano_grid_det(W, parmin=-.99, parmax=.99, parstep=.001, grid=None):
-        """
-        This is a theano version of the gridded determinant function
-        """
-        if grid is None:
-            grid = np.arange(parmin, parmax, parstep)
-        logdets = [_theano_det(W, par) for par in grid]
-        return np.vstack((grid, np.array(logdets).reshape(grid.shape)))
+        try:
+            eigs = nla.eigvals(matrix)
+            emin, emax = float(eigs.min()), float(eigs.max())
+        except Exception as e:
+            Warn('Dense eigenvector computation failed!')
+            if retry:
+                Warn('Retrying with sparse matrix...')
+                spmatrix = spar.csc_matrix(matrix)
+                speigen_range(spmatrix)
+            else:
+                Warn('Bailing...')
+                raise e 
+    return emin, emax
