@@ -2,12 +2,7 @@ import scipy.linalg as scla
 import scipy.stats as stats
 import numpy as np
 from ..utils import splogdet
-from steps import metropolis, inversion
-
-#X is nxp
-#Beta is px1
-#theta is jx1
-#Delta is nxj
+from ..steps import metropolis, inversion
 
 def sample(HSAR):
     """
@@ -166,8 +161,9 @@ def logp_rho(state, val=state.Rho):
     on the current state of the sampler.
     """
     st = state
+    #truncate, because logdet will dominate zero probability kernel
     if (val < 1./st.W_emin) or (val > st.W_emax):
-        return np.array([0])
+        return np.array([-np.inf])
     logdet = splogdet(st.In - val * st.W)
     kernel = logp_kernel_rho(state, val)
     return logdet + kernel
@@ -200,8 +196,9 @@ def logp_lambda(state, val=state.Lambda):
     on the current state of the sampler.
     """
     st = state
+    #truncate because logdet will dominante zero probability kernel
     if (val < 1./st.M_emin) or (val > 1/st.M_emax):
-        return np.array([0])
+        return np.array([-np.inf])
     logdet = splogdet(st.Ij - val * st.M)
     kernel = logp_kernel_lambda(state, val)
     return logdet + kernel

@@ -10,8 +10,7 @@ from pysal.spreg.utils import sphstack, spdot
 from . import verify
 import types
 
-from ..abstracts import Abstract_Step, Gibbs
-from ..utils import grid_det, speigen_range, Namespace as NS
+from ..utils import speigen_range, Namespace as NS
 
 SAMPLERS = ['Betas', 'Thetas', 'Sigma2_e', 'Sigma2_u', 'Rho', 'Lambda']
 
@@ -37,6 +36,11 @@ class Base_HSAR(object):
         N, p = X.shape
         J = M.shape[0]
         self.state = NS(**{k:v for k,v in diter(locals()) if _keep(k,v)}) 
+        self.trace = NS()
+        self.traced_params = SAMPLERS
+        extras = _configs.pop('extra_tracked_params', None)
+        if extras is not None:
+            self.traced_params.extend(extra_tracked_params)
 
         initial_state, leftovers = self._setup_data(**_configs)
         self.state.update(initial_state)
@@ -45,6 +49,8 @@ class Base_HSAR(object):
         self._setup_truncation()
         self._setup_grid(self.configs.Rho, self.state.W_emin, self.state.W_emax)
         self._setup_grid(self.configs.Lambda, self.state.M_emin, self.state.M_emax)
+
+        self.state._n_iterations = 0
         
         self.sample(n_samples)
 
@@ -56,12 +62,16 @@ class Base_HSAR(object):
                  lambda_grid=None, rho_grid=None, 
                  #spatial parameter metropolis sample configurations
                  rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
-                 rho_proposal=stats.normal, rho_adapt_rate=1.001,
+                 rho_proposal=stats.normal, rho_adapt_step=1.001,
                  lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6, 
-                 lambda_proposal=stats.normal, lambda_adapt_rate=1.001,
+                 lambda_proposal=stats.normal, lambda_adapt_step=1.001,
                  #analytical parameter options:
                  betas_overwrite_covariance=True,
                  thetas_overwrite_covariance=True):
+        """
+        Omnibus function to assign configuration parameters to the correct
+        configuration namespace
+        """
         to_apply = locals()
         self.configs = Namespace()
         for sampler in SAMPLERS:
@@ -181,6 +191,10 @@ class Base_HSAR(object):
         return rval, tuning
 
     def _setup_initial_values(**configs):
+        """
+        function to set up initial values based on that stored in keyword
+        dictionary passed to init
+        """
         st = self.state
         if configs.pop('Betas', None) is None:
             st.Betas = np.zeros((st.p,1))
@@ -194,7 +208,47 @@ class Base_HSAR(object):
             st.Rho = .5
         if configs.pop('Lambda', None) is None:
             st.Lambda = .5
-    
+
+    def sample(self, ndraws, pop=False):
+        """
+        Sample from the joint posterior distribution defined by all of the
+        parameters in the gibbs sampler. 
+
+        Parameters
+        ----------
+        ndraws      :   int
+                        number of samples from the joint posterior density to
+                        take
+        pop         :   bool
+                        whether to eject the trace from the sampler. If true,
+                        this function will return a namespace containing the
+                        results of the sampler during the run, and the sampler's
+                        trace will be refreshed at the end. 
+
+        Returns
+        -------
+        updates all values in place, may return trace of sampling run if pop is
+        True
+        """
+        while ndraws > 0:
+            self.draw()
+            ndraws -= 1
+        if pop:
+            outdict = copy.deepcopy(self.trace.__dict__)
+            outtrace = NS()
+            outtrace.__dict__.update(outdict)
+            del self.trace
+            self.trace = NS()
+            return outtrace
+
+    def draw(self):
+        """
+        Take exactly one sample from the joint posterior distribution
+        """
+        sample(self)
+        for param in self.traced_params:
+            self.trace.__dict__[param].append(self.state.__dict__[param])
+
 class HSAR(Base_HSAR):
     def __init__(self, y, X, W, M, 
                  Z=None, Delta=None, membership=None,
@@ -216,6 +270,11 @@ class HSAR(Base_HSAR):
         Z               optional upper covariates
         Delta           aggregation matrix classifing W into M
         membership      vector containing classification of W into M
+        sparse
+        transform
+        n_samples
+        verbose
+        configuration parameters as defined in _setup_configs
         """
         # Weights & Projections
         W,M = verify.weights(W,M,transform)

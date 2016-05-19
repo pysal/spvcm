@@ -5,7 +5,8 @@ import scipy.linalg as scla
 from scipy.spatial import distance as d
 import numpy as np
 import copy
-from util import Namespace as NS, explode
+from ..util import Namespace as NS 
+from util import explode
 
 class SVCP(object):
     """
@@ -32,7 +33,7 @@ class SVCP(object):
     """
     def __init__(self,
                  #data parameters
-                 y, X, coordinates, 
+                 y, X, coordinates, n_samples=1000, 
                  # prior configuration parameters
                  a0=2, b0=1, v0 = 3, Omega = None, mu0=0, sigma20 = None,
                  phi_shape0=.15, phi_rate0=.05, phi_scale0=None, 
@@ -81,19 +82,23 @@ class SVCP(object):
         self._setup_priors(a0, b0, v0, Omega, mu0, sigma20, phi_shape0, phi_rate0)
         self._compute_invariants()
 
-        self.state._configs = dict()
-        self.state._configs['phi_proposal'] = proposal
-        self.state._configs['phi_accepted'] = 0
-        self.state._configs['phi_rejected'] = 0
-        self.state._configs['phi_adapt_step'] = adapt_step
-        self.state._jump = initial_jump
+        self.configs.Phi = NS()
+        self.configs.Phi.proposal = proposal
+        self.configs.Phi.accepted = 0
+        self.configs.Phi.rejected = 0
+        self.configs.Phi.adapt_step = adapt_step
+        self.configs.Phi.jump = initial_jump
+        self.configs.Phi.ar_low = .4
+        self.configs.Phi.ar_hi = .6
         if tuning > 0:
-            self.state._tuning = True
-            self.state._max_tuning = tuning
+            self.configs.tuning = True
+            self.configs.max_tuning = tuning
         else:
-            self.state._tuning = False
+            self.configs.tuning = False
+            self.configs.max_tuning = 0
         
         self.state._n_iterations = 0
+        self.sample(n_samples)
 
     def _setup_priors(self, a0, b0, v0, Omega, mu0, sigma20, phi_shape0, phi_rate0):
         st = self.state
@@ -140,12 +145,13 @@ class SVCP(object):
             ndraws -= 1
         if pop:
             outdict = copy.deepcopy(self.trace.__dict__)
-            outtrace = NS().__dict__.update(outdict)
+            outtrace = NS()
+            outtrace.__dict__.update(outdict)
             del self.trace
             self.trace = NS()
             return outtrace
 
     def draw(self):
-        sample(self.state)
+        sample(self)
         for param in self.traced_params:
             self.trace.__dict__[param].append(self.state.__dict__[param])

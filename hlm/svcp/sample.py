@@ -13,12 +13,12 @@ def H(phi, pwds, method=nexp_weights):
     return method(phi, pwds)
 
 
-def sample(state):
+def sample(SVCP):
     """
     Conduct one iteration of a Gibbs sampler for the SVCP using the state
     provided. 
     """
-    st = state
+    st = SVCP.state
     
     ## Tau, EQ 3 in appendix of Wheeler & Calder
     ## Inverse Gamma w/ update to scale, no change to dof
@@ -80,9 +80,9 @@ def sample(state):
 
     # local nonstationarity parameter Phi, in equation 7 in Wheeler & Calder
     # sample using metropolis
-    sample_phi(state)
+    sample_phi(SVCP)
     
-    state._n_iterations += 1
+    st._n_iterations += 1
     
 
 def logp_phi(state, phi):
@@ -103,49 +103,77 @@ def logp_phi(state, phi):
     gamma_kernel = np.log(phi)*(st.alpha0 - 1) + -1*st.lambda0*phi
     return -.5*logdet + normal_kernel + gamma_kernel
     
-def sample_phi(state):
+def sample_phi(SVCP):
+    """
+    Sample phi, conditional on the state contained in the SVCP sampler
+
+    Parameters
+    ----------
+    SVCP    :   sampler
+                the execution context in which phi is to be sampled
+
+    Returns
+    --------
+    None. works by sampling in place on SVCP. It updates:
+    configs.phi.accepted OR configs.phi.rejected
+    configs.phi.jump if tuning
+    configs.phi.tuning if ending tuning
+    state.Phi
+    """
+    state = SVCP.state
+    cfg = SVCP.configs
     current = state.Phi
-    state._phi_current_logp = logp_phi(state, state.Phi)
     try:
         #special proposals can be stored in configs
-        proposal = state._configs['phi_proposal']
+        proposal = cfg.Phi.proposal
     except KeyError:
         #if we don't have a proposal, take it to be a normal proposal
         proposal = stats.normal
         # and short circuit this assignment for later
-        state._configs['phi_proposal'] = proposal
-    new_val, accepted, new_logp = metropolis(state, current,
-                                   proposal, logp_phi,
-                                   current_logp=state._phi_current_logp)
+        cfg.Phi.proposal = proposal
+    new_val, accepted, new_logp = metropolis(state, current, proposal,
+                                             logp_phi,cfg.Phi.jump)
 
     state.Phi = new_val
     if accepted:
-        state._configs['phi_accepted'] += 1
-        state._phi_current_logp = new_logp
+        cfg.Phi.accepted += 1
     else:
-        state._configs['phi_rejected'] += 1
-
-    if state._tuning:
-        acc = state._configs['phi_accepted']
-        rej = state._configs['phi_rejected']
+        cfg.Phi.rejected += 1
+    if cfg.tuning:
+        acc = cfg.Phi.accepted
+        rej = cfg.Phi.rejected
         ar = acc / (acc + rej)
-        if ar < .4:
-            state._jump *= state._configs['phi_adapt_step']
-        elif ar > .6:
-            state._jump /= state._configs['phi_adapt_step']
-        if state._n_iterations > state._max_tuning:
-            state._tuning = False
+        if ar < cfg.Phi.ar_low:
+            cfg.Phi.jump *= cfg.Phi.adapt_step
+        elif ar > cfg.Phi.ar_hi:
+            cfg.Phi.jump /= cfg.Phi.adapt_step
+        if state._n_iterations > cfg.max_tuning:
+            cfg.tuning = False
 
-def metropolis(state, current, proposal, logp, current_logp=None):
-    new_val = proposal.rvs(loc=current, scale=state._jump)
+def metropolis(state, current, proposal, logp, jump):
+    """
+    Simple metropolis algorithm for symmetric proposals.
+
+    Parameters
+    ----------
+    state       :   Namespace
+                    the current state of the sampler in a dict-like container
+    current     :   numeric
+                    the current value of the parameter being sampled
+    proposal    :   scipy distribution
+                    a distribution that supports a `.rvs(loc=, scale=)` method
+    logp        :   callable(state, value)
+                    a function that computes the log pdf of the value,
+                    conditional on the information in state
+    jump        :   numeric
+                    the current value of the proposal scale parameter
+    """
+    current_logp = logp(state, current)
+    new_val = proposal.rvs(loc=current, scale=jump)
     new_logp = logp(state, new_val)
     r = np.min((1, np.exp(new_logp - current_logp)))
     u = np.random.random()
     
-    #print(u, r)
-    #print(new_val, new_logp)
-    #print(current, current_logp)
-
     if u < r:
         outval = new_val
         outlogp = new_logp
