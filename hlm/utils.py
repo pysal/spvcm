@@ -76,16 +76,16 @@ def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
 # MATRIX UTILITIES #
 ####################
 
-def splogdet(M):
+def splogdet(matrix):
     """
     compute the log determinant via an appropriate method. 
     """
     redo = False
-    if spar.issparse(M):
-        LU = spla.splu(M)
+    if spar.issparse(matrix):
+        LU = spla.splu(matrix)
         ldet = np.sum(np.log(np.abs(LU.U.diagonal())))
     else:
-        sgn, ldet = nla.slogdet(M)
+        sgn, ldet = nla.slogdet(matrix)
         if np.isinf(ldet) or sgn is 0:
             Warn('Dense log determinant via numpy.linalg.slogdet() failed!')
             redo = True
@@ -95,7 +95,7 @@ def splogdet(M):
         ldet = sgn*ldet
     if redo:
         Warn("Please pass convert to a sparse weights matrix. Trying sparse determinant...", UserWarning)
-        ldet = splogdet(spar.csc_matrix(M))
+        ldet = splogdet(spar.csc_matrix(matrix))
     return ldet
 
 def speye(i, sparse=True):

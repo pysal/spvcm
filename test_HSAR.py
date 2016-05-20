@@ -16,7 +16,7 @@ W_up.transform = 'r'
 membership = data[['county']].values
 
 s = hlm.HSAR(y, X, W_low, W_up, membership=membership, n_samples=0)
-s.sample(1000)
-
-df = pd.DataFrame().from_records(s.trace.__dict__)
-df.to_csv('./tracetest.csv')
+#s.sample(1000)
+#
+#df = pd.DataFrame().from_records(s.trace.__dict__)
+#df.to_csv('./tracetest.csv')

@@ -2,6 +2,7 @@ from __future__ import division
 
 import numpy as np
 import scipy.stats as stats
+import scipy.sparse as spar
 from numpy import linalg as la
 from warnings import warn as Warn
 from pysal.spreg.utils import sphstack, spdot
@@ -48,10 +49,12 @@ class Base_HSAR(object):
         self._setup_configs(**_configs)
         self._setup_initial_values(**_configs)
         self._setup_truncation()
-        self._setup_grid(self.configs.Rho, self.state.Rho_min, self.state.Rho_max,
-                         self.state.W, self.state.In)
-        self._setup_grid(self.configs.Lambda, self.state.Lambda_min,
-                         self.state.Lambda_max, self.state.M, self.state.Ij)
+        if self.configs.Rho.sample_method.startswith('grid'):
+            self._setup_grid(self.configs.Rho, self.state.Rho_min, 
+                             self.state.Rho_max, self.state.W, self.state.In)
+        if self.configs.Lambda.sample_method.startswith('grid'):
+            self._setup_grid(self.configs.Lambda, self.state.Lambda_min,
+                             self.state.Lambda_max, self.state.M, self.state.Ij)
 
         self.state._n_iterations = 0
         self.cycles = 0
@@ -131,7 +134,7 @@ class Base_HSAR(object):
         state.Lambda_min = 1./M_emin
         state.Lambda_max = 1./M_emax
 
-    def _setup_grid(self, conf, emin, emax, W, I):
+    def _setup_grid(self, conf, emin, emax, Wmatrix, I):
         """
         This computes the parameter grid for the gridded gibbs approach
         """
@@ -163,7 +166,8 @@ class Base_HSAR(object):
             conf.grid, conf.logdets = conf.grid
             return #break out early so we don't recompute the grid
         conf.grid = conf.grid[1:-1] #omit endpoints
-        conf.logdets = np.asarray([splogdet(I - rho * W) for rho in conf.grid])
+        conf.logdets = np.asarray([splogdet(spar.csc_matrix(I - param * Wmatrix)) 
+                                   for param in conf.grid])
 
     def _setup_data(self, **tuning):
         """
@@ -291,12 +295,8 @@ class HSAR(Base_HSAR):
         except AssertionError:
             raise UserWarning('Number of lower-level observations does not match between X ({}) and W ({})'.format(_N, N))
 
-        if sparse:
-            Wmat = W.sparse
-            Mmat = M.sparse
-        else:
-            Wmat = W.full()[0]
-            Mmat = M.full()[0]
+        Wmat = W.sparse
+        Mmat = M.sparse
         
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
         
