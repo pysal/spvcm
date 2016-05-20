@@ -125,7 +125,16 @@ def speigen_range(matrix, retry=True, coerce=True):
     Construct the eigenrange of a potentially sparse matrix. 
     """
     if spar.issparse(matrix):
-        emax = spla.eigs(matrix, k=1, which='LR')[0]
+        try:
+            emax = spla.eigs(matrix, k=1, which='LR')[0]
+        except (spla.ArpackNoConvergence, spla.ArpackError) as e:
+            rowsums = np.unique(np.asarray(matrix.sum(axis=1)).flatten())
+            if np.allclose(rowsums, np.ones_like(rowsums)):
+                emax = np.array([1])
+            else:
+                Warn('Maximal eigenvalue computation failed to converge'
+                     ' and matrix is not row-standardized.')
+                raise e
         emin = spla.eigs(matrix, k=1, which='SR')[0]
         if coerce:
             emax = emax.astype(float)

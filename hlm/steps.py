@@ -17,10 +17,14 @@ def inversion(pdvec, grid):
         pdvec = pdvec / pdvec.sum()
     cdvec = np.cumsum(pdvec)
     np.testing.assert_allclose(cdvec[-1], 1)
+    a = 0
     while True:
+        a += 1
         rval = np.random.random()
         topidx = np.sum(cdvec <= rval) -1
+        print('\ttry'.format(a))
         if topidx >= 0:
+            print('\ttook {} tries'.format(a))
             return grid[topidx]
 
 def metropolis(state, current, proposal, logp, configs):

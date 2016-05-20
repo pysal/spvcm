@@ -4,13 +4,13 @@ import numpy as np
 import scipy.stats as stats
 from numpy import linalg as la
 from warnings import warn as Warn
-from six import iteritems as diter
 from pysal.spreg.utils import sphstack, spdot
+from .sample import sample
 
 from . import verify
 import types
 
-from ..utils import speigen_range, Namespace as NS
+from ..utils import speigen_range, splogdet, Namespace as NS
 
 SAMPLERS = ['Betas', 'Thetas', 'Sigma2_e', 'Sigma2_u', 'Rho', 'Lambda']
 
@@ -35,22 +35,26 @@ class Base_HSAR(object):
         # dimensions
         N, p = X.shape
         J = M.shape[0]
-        self.state = NS(**{k:v for k,v in diter(locals()) if _keep(k,v)}) 
+        self.state = NS(**{k:v for k,v in dict(locals()).items() if _keep(k,v)}) 
         self.trace = NS()
         self.traced_params = SAMPLERS
         extras = _configs.pop('extra_tracked_params', None)
         if extras is not None:
             self.traced_params.extend(extra_tracked_params)
+        self.trace.update({k:[] for k in self.traced_params})
 
         initial_state, leftovers = self._setup_data(**_configs)
         self.state.update(initial_state)
         self._setup_configs(**_configs)
         self._setup_initial_values(**_configs)
         self._setup_truncation()
-        self._setup_grid(self.configs.Rho, self.state.W_emin, self.state.W_emax)
-        self._setup_grid(self.configs.Lambda, self.state.M_emin, self.state.M_emax)
+        self._setup_grid(self.configs.Rho, self.state.Rho_min, self.state.Rho_max,
+                         self.state.W, self.state.In)
+        self._setup_grid(self.configs.Lambda, self.state.Lambda_min,
+                         self.state.Lambda_max, self.state.M, self.state.Ij)
 
         self.state._n_iterations = 0
+        self.cycles = 0
         
         self.sample(n_samples)
 
@@ -73,11 +77,12 @@ class Base_HSAR(object):
         configuration namespace
         """
         to_apply = locals()
-        self.configs = Namespace()
+        self.configs = NS()
         for sampler in SAMPLERS:
-            self._configs.update({sampler:Namespace()})
-            confs = self._configs[sampler]
-            apply_to_this = {k:v for k in to_apply if k.startswith(sampler.lower())}
+            self.configs.update({sampler:NS()})
+            confs = self.configs[sampler]
+            apply_to_this = {k:v for k,v in to_apply.items() 
+                             if k.startswith(sampler.lower())}
             apply_to_this = {k.lstrip(sampler.lower() + '_'):v 
                              for k,v in apply_to_this.items()}
             confs.update(apply_to_this)
@@ -106,16 +111,13 @@ class Base_HSAR(object):
         (1/Rho_min = 1/Lambda_min = 1/Joint_min,
          1/Rho_max = 1/Lambda_max = 1/Joint_max,)
         """
+        state = self.state
         if self.configs.truncate == 'eigs':
             W_emin, W_emax = speigen_range(state.W)
-            state.W_emin = W_emin
-            state.W_emax = W_emax
             M_emin, M_emax = speigen_range(state.M)
-            state.M_emin = M_emin
-            state.M_emax = M_emax
         elif self.configs.truncate == 'stable':
-            state.W_emin = state.M_emin = -1
-            state.W_emax = state.W_emax = 1
+            W_emin = M_emin = -1
+            W_emax = W_emax = 1
         elif isinstance(self.configs.truncate, tuple):
             try:
                 W_emin, W_emax, M_emin, M_emax = truncate
@@ -124,15 +126,17 @@ class Base_HSAR(object):
                 M_emin, M_emax = W_emin, W_emax
         else:
             raise Exception('Truncation parameter was not understood.')
-        state.W_emin = W_emin
-        state.W_emax = W_emax
-        state.M_emin = M_emin
-        state.M_emax = M_emax
+        state.Rho_min = 1./W_emin
+        state.Rho_max = 1./W_emax
+        state.Lambda_min = 1./M_emin
+        state.Lambda_max = 1./M_emax
 
-    def _setup_grid(self, conf, emin, emax):
+    def _setup_grid(self, conf, emin, emax, W, I):
         """
         This computes the parameter grid for the gridded gibbs approach
         """
+        if conf.grid is None:
+            conf.grid = .001
         if isinstance(conf.grid, int):
             conf.k = conf.grid
             conf.grid = np.linspace(emin, emax, num=conf.k)
@@ -158,39 +162,39 @@ class Base_HSAR(object):
                 conf.grid = conf.grid.T
             conf.grid, conf.logdets = conf.grid
             return #break out early so we don't recompute the grid
-        conf.logdets = np.asarray([splogdet(rho) for rho in conf.grid])
+        conf.grid = conf.grid[1:-1] #omit endpoints
+        conf.logdets = np.asarray([splogdet(I - rho * W) for rho in conf.grid])
 
     def _setup_data(self, **tuning):
         """
         This sets up the same example problem as in the Dong & Harris HSAR code. 
         """
 
-        In = np.identity(self._state.N)
-        Ij = np.identity(self._state.J)
+        In = np.identity(self.state.N)
+        Ij = np.identity(self.state.J)
         ##Prior specs
-        M0 = tuning.pop('M0', np.zeros((self._state.p, 1)))
-        T0 = tuning.pop('T0', np.identity(self._state.p) * 100)
+        M0 = tuning.pop('M0', np.zeros((self.state.p, 1)))
+        T0 = tuning.pop('T0', np.identity(self.state.p) * 100)
         a0 = tuning.pop('a0', .01)
         b0 = tuning.pop('b0', .01)
         c0 = tuning.pop('c0', .01)
         d0 = tuning.pop('d0', .01)
 
         ##fixed matrix manipulations for MCMC loops
-        XtX = spdot(self._state.X.T, self._state.X)
+        XtX = spdot(self.state.X.T, self.state.X)
         XtXi = la.inv(XtX)
         T0inv = la.inv(T0)
-        T0invM0 = spdot(invT0, M0)
+        T0invM0 = spdot(T0inv, M0)
+        DtD = spdot(self.state.Delta.T, self.state.Delta)
 
         ##unchanged posterior conditionals for sigma_e, sigma_u
-        ce = self._state.N/2. + c0
-        au = self._state.J/2. + a0
+        ce = self.state.N/2. + c0
+        au = self.state.J/2. + a0
 
-        ##set up griddy gibbs
-        
-        rval = {k:v for k,v in diter(dict(locals())) if k is not 'tuning'}
+        rval = {k:v for k,v in dict(locals()).items() if k is not 'tuning'}
         return rval, tuning
 
-    def _setup_initial_values(**configs):
+    def _setup_initial_values(self, **configs):
         """
         function to set up initial values based on that stored in keyword
         dictionary passed to init
@@ -270,11 +274,11 @@ class HSAR(Base_HSAR):
         Z               optional upper covariates
         Delta           aggregation matrix classifing W into M
         membership      vector containing classification of W into M
-        sparse
-        transform
-        n_samples
-        verbose
-        configuration parameters as defined in _setup_configs
+        spars           bool, whether or not to keep weights in sparse forme
+        transform       string, whether or not to row-standardize the weights
+        n_samples       number of samples to draw
+        verbose         bool, denoting whether to print tons of verbose messages
+        configuration   parameters as defined in _setup_configs
         """
         # Weights & Projections
         W,M = verify.weights(W,M,transform)

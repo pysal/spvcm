@@ -9,11 +9,12 @@ def sample(HSAR):
     Take one iteration of the Dong Harris HSAR sampler
     """
     st = HSAR.state
-
+    
+    print('betas')
     ### Betas:
     ### Equation 27 of the Dong & Harris 2014
     Sigma_Betas = st.XtX / st.Sigma2_e + st.T0inv
-    Sigma_Betas = scla.inv(Sigma_Beta) 
+    Sigma_Betas = scla.inv(Sigma_Betas) 
     
     st.A = np.asarray(st.In - st.Rho * st.W)
     st.Ay_Xbetas = np.dot(st.A, st.y) - np.dot(st.Delta, st.Thetas)
@@ -22,9 +23,10 @@ def sample(HSAR):
     
     st.Betas = chol_mvn(Mu_Betas, Sigma_Betas)
 
+    print('thetas')
     ### Thetas
     ### Equation 28 of the Dong & Harris 2014
-    B = np.asarray(st.In - st.Lambda * st.M)
+    B = np.asarray(st.Ij - st.Lambda * st.M)
     st.BtB = np.dot(B.T, B)
 
     Sigma_Thetas = st.DtD/st.Sigma2_e + st.BtB / st.Sigma2_u
@@ -35,30 +37,34 @@ def sample(HSAR):
 
     st.Thetas = chol_mvn(Mu_Thetas, Sigma_Thetas)
 
+    print('Sigma2_u')
     ### Sigma2_u
     ### Equation 29 of Dong and Harris 2014
     ### Note: shape parameter is invariant, since J & a0 never change
     ### Note: DH parameterize the IG as Gelman (2003) do:
     ###         p(x) \propto x^{-a-1} \exp\{ -\beta / x\}
-    st.DtBtBD = np.dot(st.Thetas.T, np.dot(st.BtB, st.Thetas))
-    bu = scale_update = st.b0
+    TtBtBT = np.dot(st.Thetas.T, np.dot(st.BtB, st.Thetas))
+    bu = TtBtBT/2 + st.b0
 
     st.Sigma2_u = stats.invgamma.rvs(st.au, scale=bu)
 
+    print('Sigma2_e')
     ### Sigma2_e
     ### Equation 30 of Dong & Harris 2014
     ### Note: Shape/parameterization/invariants correspond to Sigma2_e
-    st.deviations = st.Ay_Xbetas - np.dot(Delta, st.Thetas)
-    st.ssds = np.dot(deviations.T, deviations)
+    deviations = st.Ay_Xbetas - np.dot(st.Delta, st.Thetas)
+    ssds = np.dot(deviations.T, deviations)
     de = ssds*.5 + st.d0
 
     st.Sigma2_e = stats.invgamma.rvs(st.ce, scale=de)
 
+    print('Rho')
     ### Rho
     ### Equation 31 of Dong & Harris 2014
     st.Rho = sample_spatial(HSAR.configs.Rho, st.Rho, st, 
                             logp=logp_rho, logp_kernel=logp_kernel_rho)
 
+    print('Lambda')
     ### Lambda
     ### Equation 33 of Dong & Harris 2014
     st.Lambda = sample_spatial(HSAR.configs.Lambda, st.Lambda, st, 
@@ -101,7 +107,7 @@ def sample_spatial(confs, value, state, logp = None, logp_kernel = None):
     """
     if confs.sample_method is 'grid':
         # do inversion setup
-        new_val = grid_sample(confs.grid, confs.logdets, logp_kernel_rho)
+        new_val = grid_sample(state, confs.grid, confs.logdets, logp_kernel)
     elif confs.sample_method.startswith('met'):
         # no setup for met needed
         new_val, accepted = metropolis(state, 
@@ -130,7 +136,7 @@ def sample_spatial(confs, value, state, logp = None, logp_kernel = None):
 # Metropolis-Hastings Helper Functions #
 ########################################
 
-def logp_rho(state, val=state.Rho):
+def logp_rho(state, val):
     """
     The log probability density of the Rho parameter in equation 32
     of Dong & Harris 2014. 
@@ -162,13 +168,13 @@ def logp_rho(state, val=state.Rho):
     """
     st = state
     #truncate, because logdet will dominate zero probability kernel
-    if (val < 1./st.W_emin) or (val > st.W_emax):
+    if (val < st.Rho_min) or (val > st.Rho_max):
         return np.array([-np.inf])
     logdet = splogdet(st.In - val * st.W)
     kernel = logp_kernel_rho(state, val)
     return logdet + kernel
 
-def logp_lambda(state, val=state.Lambda):
+def logp_lambda(state, val):
     """
     The log probability density of the Lambda parameter in equation 33 of
     Dong & Harris 2014.
@@ -197,7 +203,7 @@ def logp_lambda(state, val=state.Lambda):
     """
     st = state
     #truncate because logdet will dominante zero probability kernel
-    if (val < 1./st.M_emin) or (val > 1/st.M_emax):
+    if (val < st.Lambda_min) or (val > st.Lambda_max):
         return np.array([-np.inf])
     logdet = splogdet(st.Ij - val * st.M)
     kernel = logp_kernel_lambda(state, val)
@@ -346,7 +352,7 @@ def logp_kernel_rho(state, Rho):
     st = state
     A = np.asarray(st.In - Rho * st.W)
     ssds = np.dot(A, st.y) - np.dot(st.X, st.Betas) - np.dot(st.Delta, st.Thetas)
-    return -1 * ssds / (2 * state.Sigma2_e)
+    return -1 * np.dot(ssds.T, ssds) / (2 * state.Sigma2_e)
 
 def logp_kernel_lambda(state, Lambda):
     """
@@ -362,6 +368,7 @@ def logp_kernel_lambda(state, Lambda):
 
     Thus, equation 34 is in error when it provides the log kernel as positive. 
     """
+    st = state
     B = np.asarray(st.Ij - Lambda * state.M)
-    DtBtBD = np.dot(np.dot(state.Delta.T, B.T), np.dot(B,state.Delta))
-    return -1 * DtBtBD / (2 * state.Sigma2_u)
+    TtBtBT = np.dot(np.dot(state.Thetas.T, B.T), np.dot(B,state.Thetas))
+    return -1 * TtBtBT / (2 * state.Sigma2_u)
