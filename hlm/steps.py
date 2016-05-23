@@ -16,15 +16,12 @@ def inversion(pdvec, grid):
     if not np.allclose(pdvec.sum(), 1):
         pdvec = pdvec / pdvec.sum()
     cdvec = np.cumsum(pdvec)
-    np.testing.assert_allclose(cdvec[-1], 1)
     a = 0
     while True:
         a += 1
         rval = np.random.random()
         topidx = np.sum(cdvec <= rval) -1
-        print('\ttry'.format(a))
         if topidx >= 0:
-            print('\ttook {} tries'.format(a))
             return grid[topidx]
 
 def metropolis(state, current, proposal, logp, configs):
@@ -57,7 +54,7 @@ def metropolis(state, current, proposal, logp, configs):
     forwards = proposal.logpdf(new_val, loc=current, scale=configs.jump)
     backward = proposal.logpdf(current, loc=new_val, scale=configs.jump)
     
-    hastings_factor = backwards - forwards
+    hastings_factor = backward - forwards
     r = new_logp - current_logp + hastings_factor
     
     r = np.min((1, np.exp(r)))

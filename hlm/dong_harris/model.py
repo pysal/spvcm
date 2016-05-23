@@ -69,12 +69,12 @@ class Base_HSAR(object):
                  lambda_grid=None, rho_grid=None, 
                  #spatial parameter metropolis sample configurations
                  rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
-                 rho_proposal=stats.norm, rho_adapt_step=1.001,
+                 rho_proposal=stats.norm, rho_adapt_step=1.01,
                  lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6, 
-                 lambda_proposal=stats.norm, lambda_adapt_step=1.001,
+                 lambda_proposal=stats.norm, lambda_adapt_step=1.01,
                  #analytical parameter options:
                  betas_overwrite_covariance=True,
-                 thetas_overwrite_covariance=True):
+                 thetas_overwrite_covariance=True, **kw):
         """
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
@@ -86,13 +86,21 @@ class Base_HSAR(object):
             confs = self.configs[sampler]
             apply_to_this = {k:v for k,v in to_apply.items() 
                              if k.startswith(sampler.lower())}
-            apply_to_this = {k.lstrip(sampler.lower() + '_'):v 
+            apply_to_this = {'_'.join(k.split('_')[1:]):v 
                              for k,v in apply_to_this.items()}
             confs.update(apply_to_this)
-        self.configs.Rho.tuning = tuning
-        self.configs.Lambda.tuning = tuning
         self.configs.Rho.sample_method = spatial_method
         self.configs.Lambda.sample_method = spatial_method
+        if spatial_method.lower().startswith('met'):
+            self.configs.Rho.accepted = 0
+            self.configs.Rho.rejected = 0
+            self.configs.Lambda.accepted = 0
+            self.configs.Lambda.rejected = 0
+        self.configs.Rho.max_adapt = tuning
+        self.configs.Lambda.max_adapt = tuning
+        self.configs.Rho.adapt = tuning > 0
+        self.configs.Lambda.adapt = tuning > 0
+
         
         self.configs.Betas.sample_method = effects_method
         self.configs.Thetas.sample_method = effects_method
@@ -123,9 +131,9 @@ class Base_HSAR(object):
             W_emax = W_emax = 1
         elif isinstance(self.configs.truncate, tuple):
             try:
-                W_emin, W_emax, M_emin, M_emax = truncate
+                W_emin, W_emax, M_emin, M_emax = self.configs.truncate
             except ValueError:
-                W_emin, W_emax = truncate
+                W_emin, W_emax = self.configs.truncate
                 M_emin, M_emax = W_emin, W_emax
         else:
             raise Exception('Truncation parameter was not understood.')
@@ -139,7 +147,7 @@ class Base_HSAR(object):
         This computes the parameter grid for the gridded gibbs approach
         """
         if conf.grid is None:
-            conf.grid = .001
+            conf.grid = .01
         if isinstance(conf.grid, int):
             conf.k = conf.grid
             conf.grid = np.linspace(emin, emax, num=conf.k)
@@ -204,18 +212,12 @@ class Base_HSAR(object):
         dictionary passed to init
         """
         st = self.state
-        if configs.pop('Betas', None) is None:
-            st.Betas = np.zeros((st.p,1))
-        if configs.pop('Thetas', None) is None:
-            st.Thetas = np.zeros((st.J, 1))
-        if configs.pop('Sigma2_u', None) is None:
-            st.Sigma2_u = stats.invgamma.rvs(st.a0, scale=st.b0)
-        if configs.pop('Sigma2_e', None) is None:
-            st.Sigma2_e = stats.invgamma.rvs(st.c0, scale=st.d0)
-        if configs.pop('Rho', None) is None:
-            st.Rho = .5
-        if configs.pop('Lambda', None) is None:
-            st.Lambda = .5
+        st.Betas = configs.pop('Betas', np.zeros((st.p,1)))
+        st.Thetas = configs.pop('Thetas', np.zeros((st.J, 1)))
+        st.Sigma2_u = configs.pop('Sigma2_u', 2)
+        st.Sigma2_e = configs.pop('Sigma2_e', 2)
+        st.Rho = configs.pop('Rho', .5)
+        st.Lambda = configs.pop('Lambda', .5)
 
     def sample(self, ndraws, pop=False):
         """
@@ -239,6 +241,8 @@ class Base_HSAR(object):
         True
         """
         while ndraws > 0:
+            if self._verbose > 1:
+                print('{} Draws to go'.format(ndraws))
             self.draw()
             ndraws -= 1
         if pop:

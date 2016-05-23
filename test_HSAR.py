@@ -15,7 +15,8 @@ W_up.transform = 'r'
 
 membership = data[['county']].values
 
-s = hlm.HSAR(y, X, W_low, W_up, membership=membership, n_samples=0)
+s = hlm.HSAR(y, X, W_low, W_up, membership=membership, n_samples=0,
+             spatial_method='met')
 #s.sample(1000)
 #
 #df = pd.DataFrame().from_records(s.trace.__dict__)

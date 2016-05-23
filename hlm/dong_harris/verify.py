@@ -44,8 +44,8 @@ def Delta_members(Delta, membership, N, J):
             membership[region.flatten() == 1] = idx
     elif Delta is None:
         Delta = np.zeros((N, J))
-        for region in np.unique(membership):
-            Delta[membership == region] = 1
+        for idx, region in enumerate(np.unique(membership)):
+            Delta[membership.flatten() == region, idx] = 1
     else:
         raise UserWarning("Both Delta and Membership vector provided. Please pass only one or the other.")
     return Delta, membership

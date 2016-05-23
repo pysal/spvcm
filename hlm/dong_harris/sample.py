@@ -10,20 +10,22 @@ def sample(HSAR):
     """
     st = HSAR.state
     
-    print('betas')
+    if HSAR._verbose > 2:
+        print('betas')
     ### Betas:
     ### Equation 27 of the Dong & Harris 2014
     Sigma_Betas = st.XtX / st.Sigma2_e + st.T0inv
     Sigma_Betas = scla.inv(Sigma_Betas) 
     
     st.A = np.asarray(st.In - st.Rho * st.W)
-    st.Ay_Xbetas = np.dot(st.A, st.y) - np.dot(st.Delta, st.Thetas)
-    mean_update = np.dot(st.X.T, st.Ay_Xbetas) / st.Sigma2_e
+    st.Ay_DThetas = np.dot(st.A, st.y) - np.dot(st.Delta, st.Thetas)
+    mean_update = np.dot(st.X.T, st.Ay_DThetas) / st.Sigma2_e
     Mu_Betas = np.dot(Sigma_Betas, mean_update + st.T0invM0)
     
     st.Betas = chol_mvn(Mu_Betas, Sigma_Betas)
 
-    print('thetas')
+    if HSAR._verbose > 2:
+        print('thetas')
     ### Thetas
     ### Equation 28 of the Dong & Harris 2014
     B = np.asarray(st.Ij - st.Lambda * st.M)
@@ -32,23 +34,26 @@ def sample(HSAR):
     Sigma_Thetas = st.DtD/st.Sigma2_e + st.BtB / st.Sigma2_u
     Sigma_Thetas = scla.inv(Sigma_Thetas)
 
+    st.Ay_Xbetas = np.dot(st.A, st.y) - np.dot(st.X, st.Betas)
     mean_kernel = np.dot(st.Delta.T, st.Ay_Xbetas) / st.Sigma2_e 
     Mu_Thetas = np.dot(Sigma_Thetas, mean_kernel)
 
     st.Thetas = chol_mvn(Mu_Thetas, Sigma_Thetas)
 
-    print('Sigma2_u')
+    if HSAR._verbose > 2:
+        print('Sigma2_u')
     ### Sigma2_u
     ### Equation 29 of Dong and Harris 2014
     ### Note: shape parameter is invariant, since J & a0 never change
     ### Note: DH parameterize the IG as Gelman (2003) do:
     ###         p(x) \propto x^{-a-1} \exp\{ -\beta / x\}
     TtBtBT = np.dot(st.Thetas.T, np.dot(st.BtB, st.Thetas))
-    bu = TtBtBT/2 + st.b0
+    bu = TtBtBT/2. + st.b0
 
     st.Sigma2_u = stats.invgamma.rvs(st.au, scale=bu)
 
-    print('Sigma2_e')
+    if HSAR._verbose > 2:
+        print('Sigma2_e')
     ### Sigma2_e
     ### Equation 30 of Dong & Harris 2014
     ### Note: Shape/parameterization/invariants correspond to Sigma2_e
@@ -58,13 +63,15 @@ def sample(HSAR):
 
     st.Sigma2_e = stats.invgamma.rvs(st.ce, scale=de)
 
-    print('Rho')
+    if HSAR._verbose > 2:
+        print('Rho')
     ### Rho
     ### Equation 31 of Dong & Harris 2014
     st.Rho = sample_spatial(HSAR.configs.Rho, st.Rho, st, 
                             logp=logp_rho, logp_kernel=logp_kernel_rho)
 
-    print('Lambda')
+    if HSAR._verbose > 2:
+        print('Lambda')
     ### Lambda
     ### Equation 33 of Dong & Harris 2014
     st.Lambda = sample_spatial(HSAR.configs.Lambda, st.Lambda, st, 
@@ -117,18 +124,18 @@ def sample_spatial(confs, value, state, logp = None, logp_kernel = None):
                                        confs)
         # increment relevant parameters
         if accepted:
-            confs.n_accepted += 1
+            confs.accepted += 1
         else:
-            confs.n_rejected += 1
+            confs.rejected += 1
 
         #adapt if in adaptive phase
         if confs.adapt:
-            confs.ar = confs.acccepted / (confs.n_rejected+confs.n_accepted)
-            if confs.ar < confs.target_low:
-                confs.jump /= confs.adapt_rate
-            elif confs.ar > confs.target_hi:
-                confs.jump *= confs.adapt_rate
-        if (confs.n_accepted + confs.n_rejected) > confs.max_adapt:
+            confs.ar = confs.accepted / (confs.rejected+confs.accepted)
+            if confs.ar < confs.ar_low:
+                confs.jump /= confs.adapt_step
+            elif confs.ar > confs.ar_hi:
+                confs.jump *= confs.adapt_step
+        if (confs.accepted + confs.rejected) > confs.max_adapt:
             confs.adapt = False
     return new_val
 
@@ -267,7 +274,7 @@ def chol_mvn(Mu, Sigma, overwrite_Sigma=True):
     """
     D = scla.cholesky(Sigma, overwrite_a = overwrite_Sigma)
     e = np.random.normal(0,1,size=Mu.shape)
-    kernel = np.dot(D, e)
+    kernel = np.dot(D.T, e)
     return Mu + kernel
 
 def numpy_mvn(Mu, Sigma):
@@ -369,6 +376,6 @@ def logp_kernel_lambda(state, Lambda):
     Thus, equation 34 is in error when it provides the log kernel as positive. 
     """
     st = state
-    B = np.asarray(st.Ij - Lambda * state.M)
-    TtBtBT = np.dot(np.dot(state.Thetas.T, B.T), np.dot(B,state.Thetas))
-    return -1 * TtBtBT / (2 * state.Sigma2_u)
+    B = np.asarray(st.Ij - Lambda * st.M)
+    TtBtBT = np.dot(np.dot(st.Thetas.T, B.T), np.dot(B,st.Thetas))
+    return -1 * TtBtBT / (2. * st.Sigma2_u)
