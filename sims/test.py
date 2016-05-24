@@ -1,7 +1,8 @@
 import hlm
 from hlm import HSAR
 from hlm.dong_harris.verify import Delta_members
-from . import dgp
+from hlm.utils import trace_to_df
+import dgp
 import pysal as ps
 import pandas as pd
 import numpy as np
@@ -34,67 +35,76 @@ Bs = [spar.csc_matrix(Ij - lam * Mmat) for lam in lamgrid]
 rhodets = np.hstack([hlm.utils.splogdet(A) for A in As]).flatten()
 lamdets = np.hstack([hlm.utils.splogdet(B) for B in Bs]).flatten()
 
-rhos = np.hstack((rhogrid, rhodets))
-lams = np.hstack((lamgrid, lamdets))
+rhos = np.vstack((rhogrid, rhodets))
+lams = np.vstack((lamgrid, lamdets))
 
-def exp_promise(**kw):
+def experiment(**kw):
     Betas, Sigma2_e, Sigma2_u, Rho, Lambda = dgp.setup_params(**kw)
     y, X = dgp.dgp(Betas, Sigma2_e, Sigma2_u, Rho, W, Lambda, M, Delta)
-    expgrd = partial(HSAR, y,X,W,M,membership=membership, n_samples=5000,
+    expgrd =  HSAR(y,X,W,M,membership=membership, n_samples=5000,
                      spatial_method='grid', effects_method='chol',
                      rho_grid = rhos, lambda_grid=lams,
                      truncate=(W_min, W_max, M_min, M_max))
-    expmet = partial(HSAR, y,X,W,M,membership=membership, n_samples=5000,
+    expmet = HSAR(y,X,W,M,membership=membership, n_samples=5000,
                      spatial_method='met', effects_method='chol',
                      truncate=(W_min, W_max, M_min, M_max))
-    ols = partial(ps.spreg.OLS, y,X)
-    confs = [Betas, Sigma2_e, Sigma2_u, Rho, Lambda]
-    return expgrd, expmet, ols, confs
-
-def run_exp(pid, **configs):
-    grid, met, ols, confs = exp_promise(**configs)
-    grid = grid()
-    met = met()
-    ols = ols()
-    outstr = '_'.join('{}-{:.3}'.format(k,v) 
-                      for k,v in sorted(configs.keys()))
-
-def trace_to_df(trace):
-    df = pd.DataFrame().from_records(trace._data)
-    for col in df.columns:
-        if isinstance(df[col][0], np.ndarray):
-            # a flat nested (n,) of (u,) elements hstacks to (u,n)
-            new = np.hstack(df[col].values)
-
-            if new.shape[0] is 1:
-                newcols = [col]
-            else:
-                newcols = [col + '_' + str(i) for i in range(new.shape[0])]
-            
-            # a df is (n,u), so transpose and DataFrame
-            new = pd.DataFrame(new.T, columns=newcols)
-            df.drop(col, axis=1, inplace=True)
-            df = pd.concat((df[:], new[:]), axis=1)
-    return df
+    ols = ps.spreg.OLS(y,X, W, spat_diag=True, moran=True)
+    config = 'se_{}-su_{}-rho_{}-lam_{}'
+    config = config.format(Sigma2_e, Sigma2_u, Rho, Lambda)
+    df = trace_to_df(expgrd.trace)
+    df['method'] = 'grid'
+    df.to_csv('./out/'+config+'-grid.csv', index=False)
+    df = trace_to_df(expmet.trace)
+    df['method'] = 'met'
+    df.to_csv('./out/'+config+'-met.csv', index=False)
+    with open('./out/' + config + '-ols.txt', 'w') as f:
+        f.write(ols.summary)
 
 def build_frame(**kw):
+    """
+    Build an experiment frame using the range or unique values 
+    passed in as keywords. 
+
+    Parameters
+    ------------
+    kw  :   keywords
+            a name of a parameter in the HSAR and a tuple of (min,max,step) or a
+            list of unique values to use for a grid of tests
+
+    Returns
+    ---------
+    a generator that contsructs tests according to the cartesian product of the
+    grid. That is, the generator will step through all of the parameter grids
+    provided, like a nested for loop. So, if you passed:
+    build_frame(Lambda=[-.5, 0, .5], Rho=[-.5, 0, .5], Sigma2_e = [.2, 2, 20]), 
+
+    you would get experiments like:
+    for lamb in Lambda:
+        for rho in Rho:
+            for sig2e in Sigma2_e:
+                do_experiment(lamb, rho, sig2e)
+    """
     frame = dict()
     for param in PARAMETER_NAMES:
         conf = kw.get(param, None)
         if conf is not None:
             #conf should be (min,max,step) tuple or array of values
             if isinstance(conf, (np.ndarray, list)):
-                print('interpreting {} as set of values'.format(param))
                 frame.update({param:conf})
             else:
-                print('interpreting {} as (min,max,step)'.format(param))
                 frame.update({param:np.arange(*conf)})
-    allexps = it.product(*frame.items())
-    labelled = ({k:v for k,v in zip(allexps.keys(), exp)} 
-                     for exp in allexps)
-    return labelled
-    for l in labelled:
-        yield l
+    allexps = it.product(*frame.values())
+    labelled = [{k:v for k,v in zip(frame.keys(), exp)} 
+                     for exp in allexps]
+    return [partial(experiment, **l) for l in labelled]
 
+def call_self(x):
+    return x()
+if __name__ == '__main__':
+    import multiprocessing as mp
     
-
+    Pool = mp.Pool(mp.cpu_count() -1)
+    frame = build_frame(Lambda=[-.8, -.4, 0, .4, .8],
+                        Rho=[-.8,-.4,0,.4,.8],
+                        Sigma2e=[.2,2,20])
+    Pool.map(call_self, frame)

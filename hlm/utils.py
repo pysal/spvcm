@@ -2,11 +2,9 @@ from scipy import sparse as spar
 import numpy as np
 from numpy import linalg as nla
 from scipy.sparse import linalg as spla
-from pysal.spreg.opt import requires, simport
 from six import iteritems as diter
-from functools import wraps
-import time
 from warnings import warn as Warn
+import pandas as pd
 __all__ = ['grid_det']
 PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 
@@ -71,6 +69,23 @@ def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
     logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
     grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
     return grid
+
+def trace_to_df(trace):
+    df = pd.DataFrame().from_records(trace._data)
+    for col in df.columns:
+        if isinstance(df[col][0], np.ndarray):
+            # a flat nested (n,) of (u,) elements hstacks to (u,n)
+            new = np.hstack(df[col].values)
+
+            if new.shape[0] is 1:
+                newcols = [col]
+            else:
+                newcols = [col + '_' + str(i) for i in range(new.shape[0])]
+            # a df is (n,u), so transpose and DataFrame
+            new = pd.DataFrame(new.T, columns=newcols)
+            df.drop(col, axis=1, inplace=True)
+            df = pd.concat((df[:], new[:]), axis=1)
+    return df
 
 ####################
 # MATRIX UTILITIES #
