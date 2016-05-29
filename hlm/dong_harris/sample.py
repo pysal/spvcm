@@ -84,8 +84,8 @@ def sample(HSAR):
 
 def sample_spatial(confs, value, state, logp = None, logp_kernel = None):
     """
-    Sample a lower-level spatial autocorrelation parameter according to the
-    rules stored in HSAR.configs.rho
+    Sample a spatial autocorrelation parameter according to the
+    rules stored in the parameter's HSAR.configs
 
     Parameters
     ----------
