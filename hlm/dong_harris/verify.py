@@ -25,7 +25,8 @@ def covariates(X,W):
     2. adds a constant to the lower-level covariate if it has no constant
     """
     if constant_check(X):
-        raise UserWarning("X array cannot contain a constant vector; constant will be added automatically")
+        Warn("X array should not contain a constant vector;"
+             " constant will be added automatically")
     else:
         X = sphstack(np.ones((W.n, 1)), X)
     
@@ -43,8 +44,8 @@ def Delta_members(Delta, membership, N, J):
             membership[region.flatten() == 1] = idx
     elif Delta is None:
         Delta = np.zeros((N, J))
-        for region in np.unique(membership):
-            Delta[membership == region] = 1
+        for idx, region in enumerate(np.unique(membership)):
+            Delta[membership.flatten() == region, idx] = 1
     else:
         raise UserWarning("Both Delta and Membership vector provided. Please pass only one or the other.")
     return Delta, membership

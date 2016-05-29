@@ -2,10 +2,9 @@ from scipy import sparse as spar
 import numpy as np
 from numpy import linalg as nla
 from scipy.sparse import linalg as spla
-from pysal.spreg.opt import requires, simport
 from six import iteritems as diter
-from functools import wraps
-import time
+from warnings import warn as Warn
+import pandas as pd
 __all__ = ['grid_det']
 PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 
@@ -60,105 +59,6 @@ class Namespace(dict):
         for key in not_builtins:
             del self.__dict__[key]
 
-def splogdet(M):
-    """
-    compute the log determinant via an appropriate method. 
-    """
-    redo = False
-    if spar.issparse(M):
-        LU = spla.splu(M)
-        ldet = np.sum(np.log(np.abs(LU.U.diagonal())))
-    else:
-        sgn, ldet = nla.slogdet(M)
-        if np.isinf(ldet) or sgn is 0:
-            Warn('Dense log determinant via numpy.linalg.slogdet() failed!')
-            redo = True
-        if sgn not in [-1,1]:
-            Warn("Drastic loss of precision in numpy.linalg.slogdet()!")
-            redo = True
-    if redo:
-        Warn("Please pass convert to a sparse weights matrix. Trying sparse determinant...", UserWarning)
-        ldet = splogdet(spar.csc_matrix(M))
-    return ldet
-
-def speye(i, sparse=True):
-    """
-    constructs a square identity matrix according to i, either sparse or dense
-    """
-    if sparse:
-        return spar.identity(i)
-    else:
-        return np.identity(i)
-
-def speye_like(matrix):
-    """
-    constructs an identity matrix depending on the input dimension and type
-    """
-    if matrix.shape[0] != matrix.shape[1]:
-        raise UserWarning("Matrix is not square")
-    else:
-        return speye(matrix.shape[0], sparse=spar.issparse(matrix))
-
-def inversion(pdvec, grid):
-    """
-    sample from a probability distribution vector, according to a grid of values
-    """
-    if not np.allclose(pdvec.sum(), 1):
-        pdvec = pdvec / pdvec.sum()
-    cdvec = np.cumsum(pdvec)
-    np.testing.assert_allclose(cdvec[-1], 1)
-    while True:
-        rval = np.random.random()
-        topidx = np.sum(cdvec <= rval) -1
-        if topidx >= 0:
-            return grid[topidx]
-
-def metropolis(sampler, value):
-    """
-    sample using metropolis-hastings. This is done by accepting a move from some
-    current parameter value to some new parameter value with the probability:
-
-    A = P(new) / P(current) * f(current | new) / f(new | current)
-
-    where the first term is the ratio of the pdfs new and current, and f is the
-    distribution of the proposal. In logs, this is:
-
-    log(A) = log(P(new)) - log(P(current)) + (log(f(current | new)) - log(f(new | current)))
-    """
-    ll_now = sampler._current
-    new, forward_logp, backward_logp = sampler._propose(value)
-    ll_new = sampler._logp(new) 
-
-    diff = ll_now - ll_new
-    diff += (forward_logp - backward_logp)
-    
-    A = np.exp(diff)
-
-    uval = np.random.random()
-   
-    pp = np.min(1, A)
-    
-    if uval < pp:
-       returnval = new_val
-       accepted = True
-    else:
-        returnval = value
-        accepted = False
-    
-    return returnval, accepted
-
-def _adapt(sampler, value):
-    """
-    This should be a property of the proposal, not of the metropolis step.
-    """
-    accept_rate = self.acc / (self.state.steps + 1)
-    
-    if ar < .4:
-        self.step /= 1.1
-    elif ar > .6:
-        self.step *= 1.1
-    return returnval, accepted
-
 def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
     """
     This is a utility function to set up the grid of matrix determinants over a
@@ -170,24 +70,101 @@ def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
     grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
     return grid
 
-_, T = simport('theano.tensor')
-_, th = simport('theano')
-_, tla = simport('theano.tensor.nlinalg')
+def trace_to_df(trace):
+    df = pd.DataFrame().from_records(trace._data)
+    for col in df.columns:
+        if isinstance(df[col][0], np.ndarray):
+            # a flat nested (n,) of (u,) elements hstacks to (u,n)
+            new = np.hstack(df[col].values)
 
-if T is not None:
-    W = T.dmatrix('W')
-    param = T.dscalar('param')
-    I = T.identity_like(W)
-    svd = tla.svd(I - param * W)
-    det = T.sum(T.log(T.abs_(svd[1])))
-    
-    _theano_det = th.function([W, param], det, allow_input_downcast=True) 
+            if new.shape[0] is 1:
+                newcols = [col]
+            else:
+                newcols = [col + '_' + str(i) for i in range(new.shape[0])]
+            # a df is (n,u), so transpose and DataFrame
+            new = pd.DataFrame(new.T, columns=newcols)
+            df.drop(col, axis=1, inplace=True)
+            df = pd.concat((df[:], new[:]), axis=1)
+    return df
 
-    def theano_grid_det(W, parmin=-.99, parmax=.99, parstep=.001, grid=None):
-        """
-        This is a theano version of the gridded determinant function
-        """
-        if grid is None:
-            grid = np.arange(parmin, parmax, parstep)
-        logdets = [_theano_det(W, par) for par in grid]
-        return np.vstack((grid, np.array(logdets).reshape(grid.shape)))
+####################
+# MATRIX UTILITIES #
+####################
+
+def splogdet(matrix):
+    """
+    compute the log determinant via an appropriate method. 
+    """
+    redo = False
+    if spar.issparse(matrix):
+        LU = spla.splu(matrix)
+        ldet = np.sum(np.log(np.abs(LU.U.diagonal())))
+    else:
+        sgn, ldet = nla.slogdet(matrix)
+        if np.isinf(ldet) or sgn is 0:
+            Warn('Dense log determinant via numpy.linalg.slogdet() failed!')
+            redo = True
+        if sgn not in [-1,1]:
+            Warn("Drastic loss of precision in numpy.linalg.slogdet()!")
+            redo = True
+        ldet = sgn*ldet
+    if redo:
+        Warn("Please pass convert to a sparse weights matrix. Trying sparse determinant...", UserWarning)
+        ldet = splogdet(spar.csc_matrix(matrix))
+    return ldet
+
+def speye(i, sparse=True):
+    """
+    constructs a square identity matrix according to i, either sparse or dense
+    """
+    if sparse:
+        return spar.identity(i)
+    else:
+        return np.identity(i)
+
+spidentity = speye
+
+def speye_like(matrix):
+    """
+    constructs an identity matrix depending on the input dimension and type
+    """
+    if matrix.shape[0] != matrix.shape[1]:
+        raise UserWarning("Matrix is not square")
+    else:
+        return speye(matrix.shape[0], sparse=spar.issparse(matrix))
+
+spidentity_like = speye_like
+
+def speigen_range(matrix, retry=True, coerce=True):
+    """
+    Construct the eigenrange of a potentially sparse matrix. 
+    """
+    if spar.issparse(matrix):
+        try:
+            emax = spla.eigs(matrix, k=1, which='LR')[0]
+        except (spla.ArpackNoConvergence, spla.ArpackError) as e:
+            rowsums = np.unique(np.asarray(matrix.sum(axis=1)).flatten())
+            if np.allclose(rowsums, np.ones_like(rowsums)):
+                emax = np.array([1])
+            else:
+                Warn('Maximal eigenvalue computation failed to converge'
+                     ' and matrix is not row-standardized.')
+                raise e
+        emin = spla.eigs(matrix, k=1, which='SR')[0]
+        if coerce:
+            emax = emax.astype(float)
+            emin = emin.astype(float)
+    else:
+        try:
+            eigs = nla.eigvals(matrix)
+            emin, emax = eigs.min().astype(float), eigs.max().astype(float)
+        except Exception as e:
+            Warn('Dense eigenvector computation failed!')
+            if retry:
+                Warn('Retrying with sparse matrix...')
+                spmatrix = spar.csc_matrix(matrix)
+                speigen_range(spmatrix)
+            else:
+                Warn('Bailing...')
+                raise e 
+    return emin, emax
