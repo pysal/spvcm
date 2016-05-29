@@ -241,7 +241,7 @@ class Base_HSAR(object):
         True
         """
         while ndraws > 0:
-            if self._verbose > 1:
+            if (self._verbose > 1) and (ndraws % 100 == 0):
                 print('{} Draws to go'.format(ndraws))
             self.draw()
             ndraws -= 1

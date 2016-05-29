@@ -40,17 +40,18 @@ lams = np.vstack((lamgrid, lamdets))
 
 def experiment(**kw):
     Betas, Sigma2_e, Sigma2_u, Rho, Lambda = dgp.setup_params(**kw)
+    config = 'se_{}-su_{}-rho_{}-lam_{}'
+    config = config.format(Sigma2_e, Sigma2_u, Rho, Lambda)
+    print('starting {}'.format(config))
     y, X = dgp.dgp(Betas, Sigma2_e, Sigma2_u, Rho, W, Lambda, M, Delta)
     expgrd =  HSAR(y,X,W,M,membership=membership, n_samples=5000,
                      spatial_method='grid', effects_method='chol',
                      rho_grid = rhos, lambda_grid=lams,
-                     truncate=(W_min, W_max, M_min, M_max))
+                     truncate=(W_min, W_max, M_min, M_max), verbose=3)
     expmet = HSAR(y,X,W,M,membership=membership, n_samples=5000,
                      spatial_method='met', effects_method='chol',
-                     truncate=(W_min, W_max, M_min, M_max))
+                     truncate=(W_min, W_max, M_min, M_max), verbose=3)
     ols = ps.spreg.OLS(y,X, W, spat_diag=True, moran=True)
-    config = 'se_{}-su_{}-rho_{}-lam_{}'
-    config = config.format(Sigma2_e, Sigma2_u, Rho, Lambda)
     df = trace_to_df(expgrd.trace)
     df['method'] = 'grid'
     df.to_csv('./out/'+config+'-grid.csv', index=False)
@@ -103,8 +104,11 @@ def call_self(x):
 if __name__ == '__main__':
     import multiprocessing as mp
     
-    Pool = mp.Pool(mp.cpu_count() -1)
+    Pool = mp.Pool(8)
     frame = build_frame(Lambda=[-.8, -.4, 0, .4, .8],
                         Rho=[-.8,-.4,0,.4,.8],
-                        Sigma2e=[.2,2,20])
+                        Sigma2_e=[.1,5])
     Pool.map(call_self, frame)
+    Pool.close()
+    import sys
+    sys.exit()
