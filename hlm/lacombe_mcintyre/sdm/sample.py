@@ -1,4 +1,4 @@
-from pysal.spreg.sputils import spdot
+from pysal.spreg.utils import spdot
 from hlm.utils import spinv, speye_like
 import scipy.linalg as scla
 from scipy import sparse as spar
@@ -13,59 +13,89 @@ def sample(SDM):
 
     ### Sample the variance, Sigma
     st.e1 = st.Y - spdot(st.Delta, st.Alphas) - spdot(st.X,  st.Betas)
-    st.d1 = spdot(st.e1.T, st.e1) + sig2so * sig2vo #vo is initial nu,
+    st.d1 = spdot(st.e1.T, st.e1) + st.Sigma2_prod  #vo is initial nu,
                                                     # inital inverse chi-squared 
                                                     # dof parameter. 
-    st.chi = np.random.chisquare(n+sig2vo, size=1)
-    st.Sigma = np.sqrt(st.d1/st.chi)
+    st.chi = np.random.chisquare(n+st.Sigma2_v0, size=1)
+    st.Sigma2 = st.d1/st.chi
 
 
     ### Sample the first-level effects, Beta
-    covm = spinv(spdot(st.X.T, st.X)/st.Sigma**2 + betacovprior)
+    covm = spinv(spdot(st.X.T, st.X)/st.Sigma2 + st.Betas_cov0)
 
     #this is invariant
-    mean = spdot(betacovprior, betameanprior)
-    xyda = spdot(st.X.T, (st.y - spdot(st.Delta,st.Alpha)))
-    move = spdot(covm, xyda) / st.Sigma**2
+    mean = Betas_covm
+    xyda = spdot(st.X.T, (st.y - spdot(st.Delta, st.Alphas)))
+    move = spdot(covm, xyda) / st.Sigma2
     mean += move
-    zs = np.random.normal(0, 1, size=st.p).reshape(st.p, 1)
-    st.Betas = mean + spdot(scla.cholesky(covm).T,zs)
-    
+    st.Betas = chol_mvn(mean, covm, SDM.configs.Betas.overwrite)
+
     ### Sample the pooled intercept, Alpha
-    covm_kern = spdot(st.Delta.T, st.Delta) / st.Sigma**2
-    covm_upper = spdot(spdot(st.B.T, st.I_J), B) / st.Tau**2
+    covm_kern = spdot(st.Delta.T, st.Delta) / st.Sigma2
+    covm_upper = spdot(spdot(st.B.T, st.I_J), B) / st.Tau2
     covm = spinv(covm_kern + covm_upper)
-    mean_kern = spdot(st.Delta.T, st.y - spdot(st.X, st.Betas)) / st.Sigma**2
-    mean_upper= spdot(st.B.T, spdot(st.Z, st.Gammas)) / st.Tau**2
+    mean_kern = spdot(st.Delta.T, st.y - spdot(st.X, st.Betas)) / st.Sigma2
+    mean_upper= spdot(st.B.T, spdot(st.Z, st.Gammas)) / st.Tau2
     mean = spdot(covm, mean_kern + mean_hetske)
-    zs = np.random.normal(0,1,size=(st.J,1))
-    st.Alphas = mean + spdot(scla.choleksy(covm).T, zs)
+    st.Alphas = sample_mvn(mean, covm, SDM.configs.Alphas.overwrite)
    
     ### Draw Tau for upper-level variance
     e2 = spdot(st.B, st.Alphas) - spdot(st.Z, st.Gammas)
     # tau2so * tau2vo is invariant
-    d2 = spdot(e2.T, e2) + tau2so * tau2vo
-    chi = np.random.chi(st.J+tau2vo, size=1)
-    st.Tau = np.sqrt(d2/chi)
+    d2 = spdot(e2.T, e2) + st.Tau2_prod
+    chi = np.random.chi(st.J+st.Tau2_v0, size=1)
+    st.Tau2 = d2/chi
     
     ### Draw gammas, level 2 covariates
-    covm = spinv(spdot(st.Z.T, st.Z)/st.Tau**2 + st.gammacovprior)
-    mean_kern = spdot(spdot(st.Z.T, st.B), st.Alphas)/st.Tau**2 
+    covm = spinv(spdot(st.Z.T, st.Z)/st.Tau**2 + st.Gammas_cov0)
+    mean_kern = spdot(spdot(st.Z.T, st.B), st.Alphas)/st.Tau2 
     
     #this is invariant
-    mean_kern += gammacovprior * gammameanprior
+    mean_kern += st.Gammas_covm
     mean = spdot(covm, mean_kern)
-    zs = np.random.normal(0,1,size=st.q).reshape(st.q,1)
-    st.Gammas = mean + spdot(scla.chol(covm).T, zs)
-    
+    st.Gammas = sample_mvn(mean, covm, SDM.configs.Gammas.overwrite)
+
+
     ### draw Rho, the spatial dependence parameter
     st.Rho = sample_rho(SDM.configs.Rho, st.Rho, SDM.state, 
                         logp = logp_rho)
 
     SDM.cycles += 1
-##########################
-# SPATIAL SAMPLE METHODS #
-##########################
+
+#############################
+# ANALYTICAL SAMPLE METHODS #
+#############################
+
+def chol_mvn(Mu, Sigma, overwrite_Sigma=True):
+    """
+    Sample from a Multivariate Normal given a mean & Covariance matrix, using
+    cholesky decomposition of the covariance
+
+    That is, new values are generated according to :
+    New = Mu + cholesky(Sigma) . N(0,1)
+
+    Parameters
+    ----------
+    Mu      :   np.ndarray (p,1)
+                An array containing the means of the multivariate normal being
+                sampled
+    Sigma   :   np.ndarray (p,p)
+                An array containing the covariance between the dimensions of the
+                multivariate normal being sampled
+
+    Returns
+    -------
+    np.ndarray of size (p,1) containing draws from the multivariate normal
+    described by MVN(Mu, Sigma)
+    """
+    D = scla.cholesky(Sigma, overwrite_a = overwrite_Sigma)
+    e = np.random.normal(0,1,size=Mu.shape)
+    kernel = np.dot(D.T, e)
+    return Mu + kernel
+
+#############################
+# SPATIAL SAMPLE METHODS    #
+#############################
 
 def sample_rho(confs, value, state, logp):
     """
