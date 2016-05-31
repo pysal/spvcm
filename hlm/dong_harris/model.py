@@ -8,23 +8,13 @@ from warnings import warn as Warn
 from pysal.spreg.utils import sphstack, spdot
 from .sample import sample
 
-from . import verify
 import types
 
 from ..utils import speigen_range, splogdet, Namespace as NS
+from .. import verify
 
 SAMPLERS = ['Betas', 'Thetas', 'Sigma2_e', 'Sigma2_u', 'Rho', 'Lambda']
 
-
-def _keep(k,v, *matches):
-    keep = True
-    keep &= not isinstance(v, (types.ModuleType, types.FunctionType,
-                               types.BuiltinFunctionType, 
-                               types.BuiltinMethodType, type))
-    keep &= not k.startswith('_')
-    keep &= not (k is'self')
-    keep &= not (k in matches)
-    return keep
 
 class Base_HSAR(object):
     def __init__(self, y, X, W, M, Z, Delta, 
@@ -36,7 +26,9 @@ class Base_HSAR(object):
         # dimensions
         N, p = X.shape
         J = M.shape[0]
-        self.state = NS(**{k:v for k,v in dict(locals()).items() if _keep(k,v)}) 
+        
+        self.state = NS(**{'X':X, 'y':y, 'W':W, 'M':M, 'Delta':Delta, 
+                           'N':N, 'J':J, 'p':p})
         self.trace = NS()
         self.traced_params = SAMPLERS
         extras = _configs.pop('extra_tracked_params', None)
@@ -61,7 +53,7 @@ class Base_HSAR(object):
         
         self.sample(n_samples)
 
-    def _setup_configs(self, 
+    def _setup_configs(self, #would like to make these keyword only using * 
                  #multi-parameter options
                  effects_method='cho', spatial_method='grid',
                  truncate='eigs', tuning=0, 
@@ -79,7 +71,7 @@ class Base_HSAR(object):
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
         """
-        to_apply = locals()
+        to_apply = dict(locals())
         self.configs = NS()
         for sampler in SAMPLERS:
             self.configs.update({sampler:NS()})

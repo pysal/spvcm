@@ -1,6 +1,5 @@
 import numpy as np
-from pysal.spreg.utils import spmultiply, sphstack, spmin, spmax, spdot
-from ..utils import grid_det
+from pysal.spreg.utils import sphstack 
 from pysal.spreg.diagnostics import constant_check
 from warnings import warn as Warn
 
@@ -49,36 +48,3 @@ def Delta_members(Delta, membership, N, J):
     else:
         raise UserWarning("Both Delta and Membership vector provided. Please pass only one or the other.")
     return Delta, membership
-
-def parameters(gridspec, gridfile, Wmatrix):
-    """
-    This returns a lambda that, when evaluated, either 
-    
-    1. loads the log determinant grid from gridfile
-    2. computes the log determinant for each value of gridspec
-    3. computes the log determinant for np.arange(*gridspec)
-    """
-    if gridspec is None and gridfile is not '':
-        promise = lambda : grid_from_file(gridfile) #use closure to lazy load 
-    elif isinstance(gridspec, np.ndarray):
-        Warn("Computing grid of log determinants on demand may take a while")
-        return lambda : grid_det(Wmatrix, grid=gridspec) 
-    elif len(gridspec) == 3:
-        Warn("Computing grid of log determinants on demand may take a while")
-        parmin, parmax, parstep = gridspec
-        promise = lambda : grid_det(Wmatrix, parmin=parmin, parmax=parmax,
-                                    parstep=parstep) #again, promise to Base_HSAR
-    else:
-        raise UserWarning("Length of parameter slice incorrect while no grid file is provided. A range tuple must be (minimum, maximum, step).")
-    return promise 
-
-def grid_from_file(gridfile):
-    """
-    read and verify a sampling grid from a numpy file
-    """
-    data = np.load(gridfile)
-    if data.shape[1] == 2:
-        data = data.T
-    elif data.shape[0] != 2:
-        raise UserWarning('Grid read from {} is not correctly formatted. The grid must be a (2,k) array, where k is the number of gridpoints.')
-    return data
