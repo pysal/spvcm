@@ -168,3 +168,13 @@ def speigen_range(matrix, retry=True, coerce=True):
                 Warn('Bailing...')
                 raise e 
     return emin, emax
+
+def spinv(M):
+    """
+    Compute an inverse of a matrix using the appropriate sparse or dense
+    function
+    """
+    if spar.issparse(M):
+        return spla.inv(M)
+    else:
+        return nla.inv(M)

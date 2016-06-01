@@ -1,76 +1,73 @@
-from pysal.spreg.utils import spdot
-from hlm.utils import spinv, speye_like
-import scipy.linalg as scla
-from scipy import sparse as spar
-from scipy.sparse import linalg as spla
 import numpy as np
+import numpy.linalg as la
+import scipy.linalg as scla
+from pysal.spreg import spdot 
 from ...steps import metropolis
 from ...utils import splogdet
 
+def sample(SDEM):
+    st = SDEM.state
 
-def sample(SDM):
-    """
-    Step through the conditional posteriors and draw from them
-    """
-    st = SDM.state
+    ### Draw Sigma2, level 1 variance
+    e1 = st.y - st.DeltaAlphas - st.XBetas
 
-    ### Sample the variance, Sigma
-    st.e1 = st.y - st.DeltaAlphas - st.XBetas
-    st.d1 = spdot(st.e1.T, st.e1) + st.Sigma2_prod  #vo is initial nu,
-                                                    # inital inverse chi-squared 
-                                                    # dof parameter. 
-    st.chi = np.random.chisquare(st.N+st.Sigma2_v0, size=1)
-    st.Sigma2 = st.d1/st.chi
+    d1 = np.dot(e1.T, e1) 
+    d1 += st.Sigma2_prod # INVARIANT
+    
+    chirv = np.random.chisquare(st.N + st.Sigma2_v0, size=1)
+    st.Sigma2 = d1 / chirv
 
-
-    ### Sample the first-level effects, Beta
-    covm = spinv(st.XtX/st.Sigma2 + st.Betas_cov0)
-
-    #this is invariant
-    xyda = spdot(st.X.T, (st.y - st.DeltaAlphas))
-    mean = spdot(covm, xyda / st.Sigma2 + st.Betas_covm)
+    ### Draw Beta for level one covariates
+    covm = la.inv(st.XtX / st.Sigma2 + st.Betas_cov0)
+    resids = np.dot(st.X.T, (st.y - np.dot(st.Delta, st.Alphas))) / st.Sigma2
+    resids += st.Betas_covm # INVARIANT
+    mean = np.dot(covm, resids)
     st.Betas = chol_mvn(mean, covm)
-    st.XBetas = spdot(st.X, st.Betas)
+    st.XBetas = np.dot(st.X, st.Betas)
 
-    ### Sample the pooled intercept, Alpha
-    covm_kern = st.DeltatDelta / st.Sigma2
-    covm_upper = spdot(st.B.T, st.B) / st.Tau2
-    covm = spinv(covm_kern + covm_upper)
-    mean_lower = spdot(st.Delta.T, st.y - st.XBetas) / st.Sigma2
-    mean_upper = spdot(st.B.T, st.ZGammas) / st.Tau2
-    mean = spdot(covm, mean_lower + mean_upper)
+    ### Draw Alphas, spatially-correlated random intercepts
+    scaled_emp_covm = st.DeltatDelta/st.Sigma2 
+    st.BtB = spdot(st.B.T, st.B)
+    spatial_covm = st.BtB / st.Tau2
+    covm = la.inv(scaled_emp_covm + spatial_covm)
+
+    mean_kernel = np.dot(st.Delta.T, (st.y - np.dot(st.X, st.Betas))) / st.Sigma2
+    BZGammas = spdot(st.B, np.dot(st.Z, st.Gammas))
+    mean_spcorr = np.dot(st.BtB, BZGammas) / st.Tau2
+    mean = np.dot(covm, mean_kernel + mean_spcorr)
     st.Alphas = chol_mvn(mean, covm)
-    st.DeltaAlphas = spdot(st.Delta, st.Alphas)
-   
-    ### Draw Tau for upper-level variance
-    e2 = spdot(st.B, st.Alphas) - st.ZGammas
-    # tau2so * tau2vo is invariant
-    d2 = spdot(e2.T, e2) + st.Tau2_prod
-    chi = np.random.chisquare(st.J+st.Tau2_v0, size=1)
-    st.Tau2 = d2/chi
-    
-    ### Draw gammas, level 2 covariates
-    covm = spinv(st.ZtZ/st.Tau2 + st.Gammas_cov0)
-    mean_kern = spdot(spdot(st.Z.T, st.B), st.Alphas)/st.Tau2 
-    
-    #this is invariant
-    mean_kern += st.Gammas_covm
-    mean = spdot(covm, mean_kern)
+    st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
+
+    ### Draw Tau, variance in spatially-varying intercept
+    e2 = spdot(st.B, st.Alphas) - BZGammas
+    d2 = np.dot(e2.T, e2)
+    d2 += st.Tau2_prod # INVARIANT
+
+    chirv = np.random.chisquare(st.N + st.Tau2_v0, size=1) 
+    st.Tau2 = d2/chirv
+
+    ### Draw Gammas, the upper-level effects
+    covm = np.dot(st.Z.T, np.dot(st.BtB, st.Z))/st.Tau2 + st.Gammas_cov0
+    covm = la.inv(covm)
+
+    mean_kernel = np.dot(st.Z.T, np.dot(st.BtB, st.Alphas)) / st.Tau2 
+    mean_kernel += st.Gammas_covm # INVARIANT
+    mean = np.dot(covm, mean_kernel)
     st.Gammas = chol_mvn(mean, covm)
-    st.ZGammas = spdot(st.Z, st.Gammas)
+    st.BZGammas = spdot(st.B, np.dot(st.Z, st.Gammas))
 
+    ### Draw Lambda, the upper-level spatial correlation in intercepts
+    st.Lambda = sample_lambda(SDEM.configs.Lambda, st.Lambda, SDEM.state, 
+                        logp = logp_lambda)
+    st.B = st.Ij - st.Lambda * st.M
 
-    ### draw Rho, the spatial dependence parameter
-    st.Rho = sample_rho(SDM.configs.Rho, st.Rho, SDM.state, 
-                        logp = logp_rho)
-    st.B = spar.csc_matrix(st.Ij - st.Rho * st.M)
-    SDM.cycles += 1
+    SDEM.cycles += 1
 
 #############################
-# ANALYTICAL SAMPLE METHODS #
+# Analytical Sampling steps #
 #############################
 
-def chol_mvn(Mu, Sigma):
+def chol_mvn(Mu, Sigma, overwrite_Sigma=True):
     """
     Sample from a Multivariate Normal given a mean & Covariance matrix, using
     cholesky decomposition of the covariance
@@ -92,7 +89,7 @@ def chol_mvn(Mu, Sigma):
     np.ndarray of size (p,1) containing draws from the multivariate normal
     described by MVN(Mu, Sigma)
     """
-    D = scla.cholesky(Sigma, overwrite_a = True)
+    D = scla.cholesky(Sigma, overwrite_a = overwrite_Sigma)
     e = np.random.normal(0,1,size=Mu.shape)
     kernel = np.dot(D.T, e)
     return Mu + kernel
@@ -101,7 +98,7 @@ def chol_mvn(Mu, Sigma):
 # SPATIAL SAMPLE METHODS    #
 #############################
 
-def sample_rho(confs, value, state, logp):
+def sample_lambda(confs, value, state, logp):
     """
     Sample a spatial parameter according to the rules stored in the parameter's
     SDM.configs
@@ -141,17 +138,17 @@ def sample_rho(confs, value, state, logp):
             confs.adapt = False
     return new_val
 
-def logp_rho(state, val):
+def logp_lambda(state, val):
     """
-    The logp for Rho.
+    The logp for Lambda as defined in 
     """
     st = state
     
     #must truncate in logp otherwise sampling gets unstable
-    if (val < st.Rho_min) or (val > st.Rho_max):
+    if (val < st.Lambda_min) or (val > st.Lambda_max):
         return np.array([-np.inf])
-    B = spar.csc_matrix(st.Ij - val * st.M)
+    B = st.Ij - val * st.M
     logdet = splogdet(B)
-    ssq = spdot(B, st.Alphas) - spdot(st.Z, st.Gammas)
-    ssq = spdot(ssq.T, ssq) 
-    return logdet + -.5  * ssq / st.Sigma2
+    resids = np.dot(B, st.Alphas) - np.dot(B, np.dot(st.Z, st.Gammas))
+    ssq = np.dot(resids.T, resids)
+    return logdet + -.5 * ssq / st.Sigma2

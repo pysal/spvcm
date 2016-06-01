@@ -13,11 +13,11 @@ from ... import verify
 from ...utils import speigen_range, splogdet, Namespace as NS
 
 
-SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Gammas', 'Rho']
+SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Gammas', 'Lambda']
 
-class Base_HSDM(object):
+class Base_HSDEM(object):
     """
-    The class that actually ends up setting up the HSDM model. Sets configs,
+    The class that actually ends up setting up the HSDEM model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the
     sample function n_samples times to the state. 
     """
@@ -38,7 +38,7 @@ class Base_HSDM(object):
         self._setup_configs(**leftovers)
         self._setup_truncation()
         self._setup_initial_values()
-        
+
         self.cycles = 0
         self.sample(n_samples)
 
@@ -59,11 +59,11 @@ class Base_HSDM(object):
         Gammas_covm = np.dot(Gammas_cov0, Gammas_mean0)
         Tau2_prod = np.dot(Tau2_s0, Tau2_v0)
         Sigma2_prod = np.dot(Sigma2_s0, Sigma2_v0)
-
+        
         XtX = np.dot(self.state.X.T, self.state.X)
         ZtZ = np.dot(self.state.Z.T, self.state.Z)
         DeltatDelta = np.dot(self.state.Delta.T, self.state.Delta)
-        
+
         innovations = {k:v for k,v in dict(locals()).items() if k not in ['hypers', 'self']}
         self.state.update(innovations)
 
@@ -71,8 +71,8 @@ class Base_HSDM(object):
 
     def _setup_configs(self, #would like to make these keyword only using * 
                  #multi-parameter options
-                 truncate='eigs', tuning=0, 
-                 #spatial parameter grid sample configurations:
+                 tuning=0, 
+                 #spatial parameter metropolis configurations:
                  rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
                  rho_proposal=stats.norm, rho_adapt_step=1.01,
                  **kw):
@@ -81,36 +81,26 @@ class Base_HSDM(object):
         configuration namespace
         """
         self.configs = NS()
-        self.configs.truncate = truncate
-        self.configs.Rho = NS()
-        self.configs.Rho.jump = rho_jump
-        self.configs.Rho.ar_low = rho_ar_low
-        self.configs.Rho.ar_hi = rho_ar_hi
-        self.configs.Rho.proposal = rho_proposal
-        self.configs.Rho.adapt_step = rho_adapt_step
-        self.configs.Rho.rejected = 0
-        self.configs.Rho.accepted = 0
-        self.configs.Rho.max_adapt = tuning 
-        if tuning > 0:
-            self.configs.Rho.adapt = True
-        else:
-            self.configs.Rho.adapt = False
+        self.configs.Lambda = NS()
+        self.configs.Lambda.jump = rho_jump
+        self.configs.Lambda.ar_low = rho_ar_low
+        self.configs.Lambda.ar_hi = rho_ar_hi
+        self.configs.Lambda.proposal = rho_proposal
+        self.configs.Lambda.adapt_step = rho_adapt_step
+        self.configs.Lambda.rejected = 0
+        self.configs.Lambda.accepted = 0
+        self.configs.Lambda.max_adapt = tuning
+        self.configs.Lambda.adapt = tuning > 0
+        
 
     def _setup_truncation(self):
         """
-        This computes truncations for the spatial parameters. 
-
-        If configs.truncate is set to 'eigs', computes the eigenrange of the two
-        spatial weights matrices using speigen_range
-
-        If configs.truncate is set to 'stable', sets the truncation to -1,1
-        
-        If a tuple is passed to truncate, then this will truncate the
-        distribution according to this tuple
+        This computes truncations for the spatial parameter, Lambda. If the weights
+        matrix is standardized, this will be (1/min_eigenvalue, 1)
         """
         M_emin, M_emax = speigen_range(self.state.M)
-        self.state.Rho_min = 1./M_emin
-        self.state.Rho_max = 1./M_emax
+        self.state.Lambda_min = 1./M_emin
+        self.state.Lambda_max = 1./M_emax
 
     def _setup_initial_values(self):
         """
@@ -121,13 +111,13 @@ class Base_HSDM(object):
         Alphas = np.zeros((self.state.J, 1))
         Sigma2 = 2
         Tau2 = 2
-        Rho = -1.0 / (self.state.J - 1)
-        B = spar.csc_matrix(self.state.Ij - Rho * self.state.M)
+        Lambda = -1.0 / (self.state.N - 1)
+        B = spar.csc_matrix(self.state.Ij - Lambda * self.state.M)
         DeltaAlphas = np.dot(self.state.Delta, Alphas)
-        XBetas = np.dot(self.state.X, Betas)
+        XBetas = spdot(self.state.X, Betas)
         ZGammas = np.dot(self.state.Z, Gammas)
         BZGammas = spdot(B, ZGammas)
-        
+
         innovations = {k:v for k,v in dict(locals()).items() if k not in ['self']}
         self.state.update(innovations)
 
@@ -173,7 +163,7 @@ class Base_HSDM(object):
         for param in self.traced_params:
             self.trace.__dict__[param].append(self.state.__dict__[param])
 
-class HSDM(Base_HSDM): 
+class HSDEM(Base_HSDEM): 
     """
     The class that intercepts & validates input
     """
@@ -199,6 +189,6 @@ class HSDM(Base_HSDM):
         X = verify.covariates(X, W)
 
         self._verbose = verbose
-        super(HSDM, self).__init__(y, X, Wmat, Mmat, Z, Delta, n_samples,
+        super(HSDEM, self).__init__(y, X, Wmat, Mmat, Z, Delta, n_samples,
                 **options)
         pass
