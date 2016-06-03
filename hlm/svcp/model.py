@@ -2,11 +2,13 @@ from __future__ import division
 import numpy as np
 import copy
 import scipy.linalg as scla
+import scipy.sparse as spar
 from scipy import stats 
 from scipy.spatial import distance as d
 from .utils import explode
 from .sample import sample, H
 from ..utils import Namespace as NS 
+from pysal.spreg import spdot
 
 class SVCP(object):
     """
@@ -43,11 +45,11 @@ class SVCP(object):
                  tuning=0, initial_jump=5, adapt_step = 1.001, 
                  lower_ar=.4, upper_ar=.6, proposal=stats.norm,
                  #additional configuration parameters
-                 extra_tracked_params = None, dmetric='euclidean'):
+                 extra_tracked_params = None, dmetric='euclidean', verbose=False):
         n,p = X.shape
         Xs = X
         
-        X = explode(X)
+        X = spar.csr_matrix(explode(X))
 
 
         self.state = NS() 
@@ -56,6 +58,7 @@ class SVCP(object):
         if extra_tracked_params is not None:
             self.traced_params.extend(extra_tracked_params)
         st = self.state
+        self.verbose = verbose
         
         for param in self.traced_params:
             self.trace.__dict__.update({param:[]})
@@ -80,8 +83,9 @@ class SVCP(object):
             st.pwds = st._dmetric(st.coordinates)
 
         self._setup_priors(a0, b0, v0, Omega, mu0, sigma20, phi_shape0, phi_rate0)
+        self._setup_initials(Phi, T, Mus, Betas)
         self._compute_invariants()
-
+        self.configs = NS() 
         self.configs.Phi = NS()
         self.configs.Phi.proposal = proposal
         self.configs.Phi.accepted = 0
@@ -96,6 +100,7 @@ class SVCP(object):
         else:
             self.configs.tuning = False
             self.configs.max_tuning = 0
+
         
         self.state._n_iterations = 0
         self.sample(n_samples)
@@ -120,12 +125,20 @@ class SVCP(object):
             means = np.zeros((self.state.p,))
             covm = np.identity((self.state.p)) * .00001
             self.state.T = np.random.multivariate_normal(means, covm)
+        else:
+            self.state.T = T
         if Mus is None:
             self.state.Mus = np.zeros((1,self.state.p))
+        else:
+            self.state.Mus = Mus
         if Betas is None:
             self.state.Betas = np.zeros((self.state.p * self.state.n, 1))
+        else:
+            self.state.Betas = Betas
         if Phi is None:
             self.state.Phi = np.random.random()*np.max(self.state.pwds)
+        else:
+            self.state.Phi = Phi
 
     def _compute_invariants(self):
         st = self.state
@@ -135,12 +148,21 @@ class SVCP(object):
         st.mu0_cov = st.sigma20 * st.Ip
         st.mu0_cov_inv = scla.inv(st.mu0_cov)
         st.mu_kernel_prior = np.dot(st.mu0_cov_inv, st.mu0)
-        st.XtX = np.dot(st.X.T, st.X)
+        st.XtX = spdot(st.X.T, st.X)
         st.iota_n = np.ones((st.n,1))
-        st.Xty = np.dot(st.X.T, st.y)
+        st.Xty = spdot(st.X.T, st.y)
+        st.np2n = np.zeros((st.n * st.p, st.n))
+        for i in range(st.n):
+            st.np2n[i*st.p:(i+1)*st.p, i] = 1
+        st.np2p = np.vstack([np.eye(st.p) for _ in range(st.n)])
 
     def sample(self, ndraws, pop=False):
         while ndraws > 0:
+            if self.verbose >= 1:
+                if not np.isfinite(self.verbose):
+                    print('on draw {}').format(ndraws)
+                elif (ndraws % self.verbose) == 0:
+                    print('on draw {}'.format(ndraws))
             self.draw()
             ndraws -= 1
         if pop:

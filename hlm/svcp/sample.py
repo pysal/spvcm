@@ -4,6 +4,8 @@ import scipy.linalg as scla
 import numpy as np
 from warnings import warn as Warn
 from .utils import nexp_weights
+from pysal.spreg import spdot
+import scipy.sparse as spar
 
 def H(phi, pwds, method=nexp_weights):
     """
@@ -22,28 +24,29 @@ def sample(SVCP):
     
     ## Tau, EQ 3 in appendix of Wheeler & Calder
     ## Inverse Gamma w/ update to scale, no change to dof
-    y_Xbeta = st.y - np.dot(st.X, st.Betas)
-    scale = st.b0 + .5 * np.dot(y_Xbeta.T, y_Xbeta)
+    y_Xbeta = st.y - spdot(st.X, st.Betas)
+    scale = st.b0 + .5 * spdot(y_Xbeta.T, y_Xbeta)
     st.Tau2 = stats.invgamma.rvs(st.tau_dof, scale=scale)
 
     ##covariance: T, EQ 4 in appendix of Wheeler & Calder
     ## inverse wishart w/ update to covariance matrix, no change to dof
     st.H = H(st.Phi, st.pwds)
     st.Hinv = scla.inv(st.H)
-    beta_splits = np.split(st.Betas, st.n)
-    covms = []
-    for i, j in zip(*np.triu_indices_from(st.Hinv)):
-        delts = np.dot(beta_splits[i] - st.Mus, (beta_splits[j] - st.Mus).T)
-        covms.append(st.Hinv[i,j] * delts)
-    covm_update = np.sum(covms, axis=0) + st.Omega0
-    st.T = stats.invwishart.rvs(st.T_dof, covm_update)
+    st.tiled_Hinv = np.linalg.multi_dot([st.np2n, st.Hinv, st.np2n.T])
+    st.tiled_Mus = np.kron(np.ones((st.n,1)), st.Mus.reshape(-1,1))
+    st.info = (st.Betas - st.tiled_Mus).dot((st.Betas - st.tiled_Mus).T)
+    st.kernel = np.multiply(st.tiled_Hinv, st.info) #explicit is better than implicit...
+    st.covm_update = np.linalg.multi_dot([st.np2p.T, st.kernel, st.np2p])
+
+    
+    st.T = stats.invwishart.rvs(df=st.T_dof, scale=(st.covm_update + st.Omega0))
 
     ##mean hierarchical effects: mu_\beta, in EQ 5 of Wheeler & Calder
     ##normal with both a scale and a location update, priors don't change
     
     #compute scale of mu_\betas
     st.Sigma_beta = np.kron(st.H, st.T)
-    st.Psi = np.dot(np.dot(st.X, st.Sigma_beta), st.X.T) + st.Tau2 * st.In
+    st.Psi = spdot(spdot(st.X, st.Sigma_beta), st.X.T) + st.Tau2 * st.In
     Psi_inv = scla.inv(st.Psi)
     S_notinv_update = np.dot(st.Xs.T, np.dot(Psi_inv, st.Xs))
     S = scla.inv(st.mu0_cov_inv + S_notinv_update)
@@ -57,7 +60,6 @@ def sample(SVCP):
     e = np.random.normal(0,1, size=(st.p,1))
     st.Mus = st.Mu_means + np.dot(D, e) 
     
-
     ##effects \beta, in equation 6 of Wheeler & Calder
     ##Normal with an update to both scale and location, priors don't change
     
