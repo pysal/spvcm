@@ -8,7 +8,7 @@ from ... import verify
 from ...utils import sma_covariance
 
 
-SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Rho']
+SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
 
 class Base_Upper_SMA(Base_Generic):
     """
@@ -17,9 +17,10 @@ class Base_Upper_SMA(Base_Generic):
     sample function n_samples times to the state. 
     """
     def __init__(self, y, X, M, Delta, n_samples=1000, **_configs):
-        super(Base_Upper_SMA, self).__init__(y, X, np.eye(Delta.shape[1]), M, Delta, 
+        W = np.eye((Delta.shape[0]))
+        super(Base_Upper_SMA, self).__init__(y, X, W, M, Delta, 
                                       n_samples=0, skip_covariance=True, **_configs)
-        self.state.Psi_1 = lambda x, Wmat: np.eye(M.shape[0])
+        self.state.Psi_1 = lambda x, Wmat: np.eye(Wmat.shape[0])
         self.state.Psi_2 = sma_covariance
         self._setup_covariance()
         original_traced = copy.deepcopy(self.traced_params)

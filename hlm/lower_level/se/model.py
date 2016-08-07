@@ -20,7 +20,7 @@ class Base_Lower_SE(Base_Generic):
         super(Base_Lower_SE, self).__init__(y, X, W, np.eye(Delta.shape[1]), Delta, 
                                       n_samples=0, skip_covariance=True, **_configs)
         self.state.Psi_1 = se_covariance
-        self.state.Psi_2 = lambda x, Wmat: np.eye(W.shape[0])
+        self.state.Psi_2 = lambda x, Wmat: np.eye(Wmat.shape[0])
         self._setup_covariance()
         original_traced = copy.deepcopy(self.traced_params)
         to_drop = [k for k in original_traced if k not in SAMPLERS]
