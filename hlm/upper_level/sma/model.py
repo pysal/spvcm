@@ -6,11 +6,13 @@ import copy
 from ...both_levels.generic import Base_Generic
 from ... import verify
 from ...utils import sma_covariance
+from .sample import sample
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
 
 class Base_Upper_SMA(Base_Generic):
+    _sample = sample
     """
     The class that actually ends up setting up the Generic model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the

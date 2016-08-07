@@ -6,11 +6,13 @@ import copy
 from ...both_levels.generic import Base_Generic
 from ... import verify
 from ...utils import se_covariance
+from .sample import sample
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
 
 class Base_Upper_SE(Base_Generic):
+    _sample = sample
     """
     The class that actually ends up setting up the Generic model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the
@@ -28,7 +30,6 @@ class Base_Upper_SE(Base_Generic):
         self.traced_params = SAMPLERS
         for param in to_drop:
             del self.trace[param]
-
         self.sample(n_samples)
 
 class Upper_SE(Base_Upper_SE): 

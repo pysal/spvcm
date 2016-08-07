@@ -1,4 +1,6 @@
 from warnings import warn as Warn
+import datetime as dt
+
 class Sampler_Mixin(object):
     def __init__(self):
         pass
@@ -24,6 +26,7 @@ class Sampler_Mixin(object):
         updates all values in place, may return trace of sampling run if pop is
         True
         """
+        _start = dt.now()
         try:
             while n_samples > 0:
                 if (self._verbose > 1) and (n_samples % 100 == 0):
@@ -31,7 +34,10 @@ class Sampler_Mixin(object):
                 self.draw()
                 n_samples -= 1
         except KeyboardInterrupt:
-            Warn('Sampling interrupted, drew {} samples'.format(self.cycles), stacklevel=2)
+            Warn('Sampling interrupted, drew {} samples'.format(self.cycles))
+        finally:
+            _stop = dt.now()
+            self.total_sample_time += _stop - _start 
 
     def draw(self):
         """
