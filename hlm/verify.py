@@ -3,20 +3,20 @@ from pysal.spreg.utils import sphstack
 from pysal.spreg.diagnostics import constant_check
 from warnings import warn as Warn
 
-def weights(W,M, transform):
+def weights(*Weights, transform):
     """
     This tries to transform a pysal spatial weights object into being
     row-standardized. It warns if the objects do not support transformation. 
 
     """
     try:
-        W.transform = transform
-        M.transform = transform
+        for i, _ in enumerate(Weights):
+            Weights[i].transform = transform
     except AttributeError:
         Warn("Weights objects do not support transformation. Proceeding without transforming weights.", UserWarning)
-    return W, M
+    return Weights
 
-def covariates(X,W):
+def covariates(X):
     """
     This 
 
@@ -27,7 +27,7 @@ def covariates(X,W):
         Warn("X array should not contain a constant vector;"
              " constant will be added automatically")
     else:
-        X = sphstack(np.ones((W.n, 1)), X)
+        X = sphstack(np.ones((X.shape[0], 1)), X)
     
     return X
 

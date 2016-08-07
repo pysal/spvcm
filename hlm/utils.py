@@ -2,90 +2,26 @@ from scipy import sparse as spar
 import numpy as np
 from numpy import linalg as nla
 from scipy.sparse import linalg as spla
-from six import iteritems as diter
+import scipy.linalg as scla
 from warnings import warn as Warn
-import pandas as pd
+
 __all__ = ['grid_det']
 PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 
-
-class Namespace(dict):
-    """
-    This is a proxy class to add stuff to help with composition. It will expose
-    dictionary methods directly to the class's __dict__, meaning it will work
-    like a dot-access dictionary. 
-    """
-    def __init__(self, **kwargs):
-        collisions = [k in PUBLIC_DICT_ATTS for k in kwargs.keys()]
-        collisions = [k for k,collide in zip(kwargs.keys(), collisions) if collide]
-        if len(collisions) > 0:
-            raise TypeError('Passing {} to Namespace will overwrite builtin dict methods. Bailing...'.format(collisions))
-        self.__dict__.update(kwargs)
-        self._dictify()
-
-    def _dictify(self):
-        """
-        hack to make Namespace pass as if it were a dict by passing methods
-        straight through to its own dict
-        """
-        for method in PUBLIC_DICT_ATTS:
-            if method is 'clear':
-                continue #don't want to break the namespace
-            self.__dict__[method] = eval('self.__dict__.{}'.format(method))
-
-    @property
-    def _data(self):
-        return {k:v for k,v in diter(self.__dict__) if k not in PUBLIC_DICT_ATTS}
-
-    def __repr__(self):
-        innards = ', '.join(['{}:{}'.format(k,v) for k,v in diter(self._data)])
-        return '{%s}' % innards
-    
-    def __getitem__(self, val):
-        """
-        passthrough to self.__dict__[val]
-        """
-        return self.__dict__[val]
-    
-    def __setitem__(self, key, item):
-        self.__dict__[key] = item
-    
-    def __delitem__(self, key):
-        del self.__dict__[key]
-        _dictify()
-
-    def clear(self):
-        not_builtins = {k for k in self.keys() if k not in PUBLIC_DICT_ATTS}
-        for key in not_builtins:
-            del self.__dict__[key]
-
-def grid_det(W, parmin=-.99, parmax=.99,parstep=.001, grid=None):
+def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
     """
     This is a utility function to set up the grid of matrix determinants over a
     range of spatial parameters for a given W. 
     """
+    if (parmin is None) and (parmax is None):
+        parmin, parmax = speigen_range(W)
+    if parstep is None:
+        parstep = (parmax - parmin) / 1000
     if grid is None:
         grid = np.arange(parmin, parmax, parstep)
     logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
     grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
     return grid
-
-def trace_to_df(trace):
-    df = pd.DataFrame().from_records(trace._data)
-    for col in df.columns:
-        if isinstance(df[col][0], np.ndarray):
-            # a flat nested (n,) of (u,) elements hstacks to (u,n)
-            new = np.hstack(df[col].values)
-
-            if new.shape[0] is 1:
-                newcols = [col]
-            else:
-                newcols = [col + '_' + str(i) for i in range(new.shape[0])]
-            # a df is (n,u), so transpose and DataFrame
-            new = pd.DataFrame(new.T, columns=newcols)
-            df.drop(col, axis=1, inplace=True)
-            df = pd.concat((df[:], new[:]), axis=1)
-    return df
 
 ####################
 # MATRIX UTILITIES #
@@ -178,3 +114,61 @@ def spinv(M):
         return spla.inv(M)
     else:
         return nla.inv(M)
+
+#########################
+# STATISTICAL UTILITIES #
+#########################
+
+def chol_mvn(Mu, Sigma):
+    """
+    Sample from a Multivariate Normal given a mean & Covariance matrix, using
+    cholesky decomposition of the covariance
+
+    That is, new values are generated according to :
+    New = Mu + cholesky(Sigma) . N(0,1)
+
+    Parameters
+    ----------
+    Mu      :   np.ndarray (p,1)
+                An array containing the means of the multivariate normal being
+                sampled
+    Sigma   :   np.ndarray (p,p)
+                An array containing the covariance between the dimensions of the
+                multivariate normal being sampled
+
+    Returns
+    -------
+    np.ndarray of size (p,1) containing draws from the multivariate normal
+    described by MVN(Mu, Sigma)
+    """
+    D = scla.cholesky(Sigma, overwrite_a = True)
+    e = np.random.normal(0,1,size=Mu.shape)
+    kernel = np.dot(D.T, e)
+    return Mu + kernel
+
+def sma_covariance(param, W):
+    # type (float, W) -> np.dnarray
+    """
+    This computes a covariance matrix for a SMA-type error specification:
+
+    ( (I + param * W)(I + param * W)^T)
+    
+    this always returns a dense array
+    """
+    half = speye_like(W) + param * W
+    whole = half.dot(half.T)
+    return whole.toarray()
+
+def se_covariance(param, W):
+    # type (float, W) -> np.dnarray
+    """
+    This computes a covariance matrix for a SAR-type error specification:
+
+    ( (I - param * W)^T(I - param * W) )^{-1}
+    
+    and always returns a dense matrix
+
+    """
+    half = speye_like(W) - param * W
+    to_inv = half.T.dot(half)
+    return np.linalg.inv(half.toarray())

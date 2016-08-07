@@ -7,10 +7,11 @@ from scipy import stats
 from scipy.spatial import distance as d
 from .utils import explode
 from .sample import sample, H
-from ..utils import Namespace as NS 
 from pysal.spreg import spdot
+from ..trace import Trace as Trace
+from ..abstracts import Sampler_Mixin
 
-class SVCP(object):
+class SVCP(Sampler_Mixin):
     """
     A class to initialize a spatially-varying coefficient model
 
@@ -52,8 +53,8 @@ class SVCP(object):
         X = spar.csr_matrix(explode(X))
 
 
-        self.state = NS() 
-        self.trace = NS() 
+        self.state = Trace() 
+        self.trace = Trace() 
         self.traced_params = ['Betas', 'Mus', 'T', 'Phi', 'Tau2'] 
         if extra_tracked_params is not None:
             self.traced_params.extend(extra_tracked_params)
@@ -85,8 +86,8 @@ class SVCP(object):
         self._setup_priors(a0, b0, v0, Omega, mu0, sigma20, phi_shape0, phi_rate0)
         self._setup_initials(Phi, T, Mus, Betas)
         self._compute_invariants()
-        self.configs = NS() 
-        self.configs.Phi = NS()
+        self.configs = Trace() 
+        self.configs.Phi = Trace()
         self.configs.Phi.proposal = proposal
         self.configs.Phi.accepted = 0
         self.configs.Phi.rejected = 0
@@ -155,25 +156,3 @@ class SVCP(object):
         for i in range(st.n):
             st.np2n[i*st.p:(i+1)*st.p, i] = 1
         st.np2p = np.vstack([np.eye(st.p) for _ in range(st.n)])
-
-    def sample(self, ndraws, pop=False):
-        while ndraws > 0:
-            if self.verbose >= 1:
-                if not np.isfinite(self.verbose):
-                    print('on draw {}').format(ndraws)
-                elif (ndraws % self.verbose) == 0:
-                    print('on draw {}'.format(ndraws))
-            self.draw()
-            ndraws -= 1
-        if pop:
-            outdict = copy.deepcopy(self.trace.__dict__)
-            outtrace = NS()
-            outtrace.__dict__.update(outdict)
-            del self.trace
-            self.trace = NS()
-            return outtrace
-
-    def draw(self):
-        sample(self)
-        for param in self.traced_params:
-            self.trace.__dict__[param].append(self.state.__dict__[param])
