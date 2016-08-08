@@ -10,8 +10,11 @@ class Base_SESE(Base_Generic):
         self.state.Psi_1 = se_covariance
         self.state.Psi_2 = se_covariance
         self._setup_covariance()
-
-        self.sample(n_samples)
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging purposes. \n {}'.format(e))
 
 class SESE(Base_SESE):
     def __init__(self, y, X, M, W, Z=None, Delta=None, membership=None, 

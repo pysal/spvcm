@@ -1,5 +1,5 @@
 from warnings import warn as Warn
-import datetime as dt
+from datetime import datetime as dt
 
 class Sampler_Mixin(object):
     def __init__(self):
@@ -26,6 +26,7 @@ class Sampler_Mixin(object):
         updates all values in place, may return trace of sampling run if pop is
         True
         """
+        self._finalize_invariants()
         _start = dt.now()
         try:
             while n_samples > 0:
@@ -37,7 +38,10 @@ class Sampler_Mixin(object):
             Warn('Sampling interrupted, drew {} samples'.format(self.cycles))
         finally:
             _stop = dt.now()
-            self.total_sample_time += _stop - _start 
+            if not hasattr(self, 'total_sample_time'):
+                self.total_sample_time = _stop - _start
+            else:
+                self.total_sample_time += _stop - _start 
 
     def draw(self):
         """
@@ -46,3 +50,4 @@ class Sampler_Mixin(object):
         self._sample()
         for param in self.traced_params:
             getattr(self.trace, param).append(getattr(self.state, param))
+        self.cycles += 1

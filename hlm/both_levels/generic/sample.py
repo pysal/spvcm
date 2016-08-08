@@ -84,8 +84,6 @@ def sample(Model):
     st.PsiTau2i = la.inv(st.PsiTau2)
     st.PsiLambdai = la.inv(st.PsiLambda)
 
-    Model.cycles += 1
-
 #############################
 # SPATIAL SAMPLE METHODS    #
 #############################
@@ -149,7 +147,7 @@ def logp_rho(state, val):
     kernel = eta.T.dot(PsiRhoi).dot(eta) / st.Sigma2
 
     return (-.5*logdet -.5 * kernel - (st.N/2)*np.log(np.pi*2*st.Sigma2) 
-            + st.LogRho0)
+            + st.LogRho0(val))
 
 def logp_lambda(state, val):
     """
@@ -171,4 +169,4 @@ def logp_lambda(state, val):
     kernel = st.Alphas.T.dot(PsiLambdai).dot(st.Alphas) / st.Tau2
 
     return (-.5*logdet - .5*kernel - (st.J/2)*np.log(np.pi*2*st.Tau2) 
-            + st.LogLambda0)
+            + st.LogLambda0(val))

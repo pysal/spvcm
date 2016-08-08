@@ -7,11 +7,16 @@ class Base_SMASE(Base_Generic):
     def __init__(self, Y, X, W, M, Delta, n_samples=1000, **configs):
         super(Base_SMASE, self).__init__(Y, X, W, M, Delta, n_samples=0, 
                                         skip_covariance=True, **configs)
-        self.state.Psi_1 = se_covariance
-        self.state.Psi_2 = sma_covariance
+        st = self.state
+        self.state.Psi_1 = sma_covariance
+        self.state.Psi_2 = se_covariance
         self._setup_covariance()
-
-        self.sample(n_samples)
+        st.Rho_min, st.Rho_max = -st.Rho_max, -st.Rho_min
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging purposes. \n {}'.format(e))
 
 class SMASE(Base_SMASE):
     def __init__(self, y, X, M, W, Z=None, Delta=None, membership=None, 

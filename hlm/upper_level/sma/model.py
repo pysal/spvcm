@@ -22,6 +22,7 @@ class Base_Upper_SMA(Base_Generic):
         W = np.eye((Delta.shape[0]))
         super(Base_Upper_SMA, self).__init__(y, X, W, M, Delta, 
                                       n_samples=0, skip_covariance=True, **_configs)
+        st = self.state
         self.state.Psi_1 = lambda x, Wmat: np.eye(Wmat.shape[0])
         self.state.Psi_2 = sma_covariance
         self._setup_covariance()
@@ -30,8 +31,15 @@ class Base_Upper_SMA(Base_Generic):
         self.traced_params = SAMPLERS
         for param in to_drop:
             del self.trace[param]
+       
+        st.Lambda_min, st.Lambda_max = -st.Lambda_max, -st.Lambda_min
 
-        self.sample(n_samples)
+
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging purposes. \n {}'.format(e))
 
 class Upper_SMA(Base_Upper_SMA): 
     """

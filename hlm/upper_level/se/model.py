@@ -7,6 +7,7 @@ from ...both_levels.generic import Base_Generic
 from ... import verify
 from ...utils import se_covariance
 from .sample import sample
+from warnings import warn
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
@@ -30,7 +31,12 @@ class Base_Upper_SE(Base_Generic):
         self.traced_params = SAMPLERS
         for param in to_drop:
             del self.trace[param]
-        self.sample(n_samples)
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging purposes. \n {}'.format(e))
+            
 
 class Upper_SE(Base_Upper_SE): 
     """

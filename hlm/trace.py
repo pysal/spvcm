@@ -50,6 +50,13 @@ class Trace(dict):
         del self.__dict__[key]
         self._dictify()
 
+    def point(i):
+        """
+        get the ith iteration in the trace.
+        """
+        out = Trace(**copy.copy({k:v[i] for k,v in self._data.items()}))
+        return out
+
     def clear(self):
         not_builtins = {k for k in self.keys() if k not in PUBLIC_DICT_ATTS}
         for key in not_builtins:
@@ -60,7 +67,7 @@ class Trace(dict):
         return list(self._data.keys())
 
     def to_df(self):
-        df = pd.DataFrame().from_records(trace._data)
+        df = pd.DataFrame().from_records(self._data)
         for col in df.columns:
             if isinstance(df[col][0], np.ndarray):
                 # a flat nested (n,) of (u,) elements hstacks to (u,n)
@@ -75,5 +82,6 @@ class Trace(dict):
                 df.drop(col, axis=1, inplace=True)
                 df = pd.concat((df[:], new[:]), axis=1)
         return df
-
-    plot = _plt
+    
+    def plot(self, *args, **kwargs):
+        return _plt(None, trace=self, **kwargs)

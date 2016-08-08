@@ -28,7 +28,11 @@ class Base_Lower_SE(Base_Generic):
         for param in to_drop:
             del self.trace[param]
 
-        self.sample(n_samples)
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            Warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging. \n {}'.format(e))
 
 class Lower_SE(Base_Lower_SE): 
     """
