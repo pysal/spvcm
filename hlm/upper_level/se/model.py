@@ -5,7 +5,7 @@ import copy
 
 from ...both_levels.generic import Base_Generic
 from ... import verify
-from ...utils import se_covariance
+from ...utils import se_covariance, ind_covariance
 from .sample import sample
 from warnings import warn
 
@@ -23,7 +23,7 @@ class Base_Upper_SE(Base_Generic):
         W = np.eye((Delta.shape[0]))
         super(Base_Upper_SE, self).__init__(y, X, W, M, Delta, 
                                       n_samples=0, skip_covariance=True, **_configs)
-        self.state.Psi_1 = lambda x, Wmat: np.eye(Wmat.shape[0])
+        self.state.Psi_1 = ind_covariance 
         self.state.Psi_2 = se_covariance
         self._setup_covariance()
         original_traced = copy.deepcopy(self.traced_params)

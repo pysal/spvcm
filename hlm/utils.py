@@ -179,3 +179,13 @@ def se_covariance(param, W):
     half = speye_like(W) - param * W
     to_inv = half.T.dot(half)
     return np.linalg.inv(half.toarray())
+
+def ind_covariance(param, W):
+    """
+    This returns a covariance matrix for a standard diagonal specification:
+    
+    I
+
+    and always returns a dense matrix. Thus, it ignores param entirely.
+    """
+    return np.eye(W.shape[0])

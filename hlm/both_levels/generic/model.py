@@ -12,7 +12,7 @@ from pysal.spreg.utils import sphstack, spdot
 from .sample import sample
 from ...abstracts import Sampler_Mixin
 from ... import verify
-from ...utils import speigen_range, splogdet
+from ...utils import speigen_range, splogdet, ind_covariance
 from ...trace import Trace
 
 
@@ -44,10 +44,8 @@ class Base_Generic(Sampler_Mixin):
         self._setup_initial_values()
 
         if not skip_covariance: 
-            def Psi_1(par, Wobj):
-                return np.eye(Wobj.shape[0])
-            self.state.Psi_1 = Psi_1
-            self.state.Psi_2 = self.state.Psi_1
+            self.state.Psi_1 = ind_covariance 
+            self.state.Psi_2 = ind_covariance
             self._setup_covariance()
 
         
@@ -199,9 +197,9 @@ class Base_Generic(Sampler_Mixin):
         st.PsiRho = st.Psi_1(st.Rho, st.W)
         st.PsiLambda = st.Psi_2(st.Lambda, st.M)
 
-        st.PsiSigma2 = st.PsiRho * st.Sigma2
+        st.PsiSigma2 = st.PsiRho.dot(st.In * st.Sigma2)
         st.PsiSigma2i = la.inv(st.PsiSigma2)
-        st.PsiTau2 = st.PsiLambda * st.Tau2
+        st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
         st.PsiTau2i = la.inv(st.PsiTau2)
         
         st.PsiRhoi = la.inv(st.PsiRho)

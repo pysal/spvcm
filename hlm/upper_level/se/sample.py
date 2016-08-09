@@ -36,7 +36,7 @@ def sample(Model):
     ### S = (Delta'Sigma_Y^{-1}Delta + Sigma_Alpha^{-1})^{-1}
     ### b = (Delta'Sigma_Y^{-1}(Y - X\beta) + 0)
     covm_update = st.Delta.T.dot(st.Delta) / st.Sigma2
-    covm_update += st.PsiTau2i
+    covm_update += st.PsiLambdai / st.Tau2
     covm_update = la.inv(covm_update)
 
     resids = st.y - st.XBetas
@@ -68,6 +68,4 @@ def sample(Model):
     st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st, 
                                logp=logp_lambda)
     st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-    st.PsiTau2 = st.PsiLambda * st.Tau2
-    st.PsiTau2i = la.inv(st.PsiTau2)
     st.PsiLambdai = la.inv(st.PsiLambda)
