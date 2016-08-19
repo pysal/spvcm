@@ -1,0 +1,167 @@
+\documentclass[11pt]{article}
+\usepackage{setspace}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[margin=1in]{geometry}
+
+
+\usepackage[scaled]{helvet}
+\renewcommand\familydefault{\sfdefault}
+\usepackage[T1]{fontenc}
+\doublespace
+\usepackage{color}
+
+\usepackage[backend=bibtex,
+            natbib=true]{biblatex}
+\usepackage[american]{babel}
+
+\addbibresource{citations.bib}
+
+\title{A Gibbs Sampler for Spatially-Varying Parameter Models with Simultaneous Spatial Effects}
+
+\author{Levi John Wolf}
+\begin{document}
+
+\maketitle
+\doublespacing
+
+\section{Model}
+Stating a spatially-varying coefficient model with the most generic possible structure on the simultaneous spatial autoregressive effects will provide a Gibbs sampler that is valid for all restrictions of the complete model. A complete spatially-varying coefficient model with simultaneous spatial effects can be stated:
+\begin{equation}
+\begin{split}
+Y &= \rho \mathbf{W}_1 y + X_1\beta + X_2\Delta\alpha + \epsilon \\
+\alpha &= \phi \mathbf{W}_2 \alpha + Z\gamma + \zeta \\
+\epsilon &\sim \mathcal{N}(0, \Psi(\lambda)\sigma^2_e) \\
+\zeta &\sim \mathcal{N}(0, \Psi(\theta)\sigma^2_\alpha)
+\end{split}
+\end{equation}
+where $\Psi(\theta), \Psi(\lambda)$ denote the spatial components of covariance due to spatial correlation parameters ($\theta,\lambda$). For SMA or SAR-Error forms, the spatial component, $\Psi(.)$, is separable from the scale component, $\sigma^2_*$, at any level of a hierarchical spatial-autoregressive model. The model stated above is over-specified, and is not recommended for actual analysis. However, focusing on this model will provide a single sampler that is valid for any restrictions of the model, such as no endogenous lag ($\rho, \phi = 0$), or when no spatial effects exist on the upper-level ($\phi, \theta = 0$). In addition, a sampler for this specification will also hold for any restriction of $X_1, X_2,$ and $Z$, so the sampler derived below is equivalent to the multilevel variance components Gibbs sampler under restrictions of $X_1$, $X_2$, and $Z$. It will also correctly sample a varying-intercept specification with appropriate restrictions of $X_1$, $X_2$, and $X_1$.
+
+\section{Likelihoods}
+The likelihood for the lower-level outcome $Y$ conditional on \textit{all parameters}, $\mathcal{L}(Y | \cdots)$, includes the $\alpha$ term in the linear predictor:
+\begin{equation}
+\begin{split}
+P(Y|\alpha, \rho, \beta, \Psi(\lambda), \sigma^2_e) =
+&|I - \rho \mathbf{W}_1|
+\times |\Psi(\lambda)|^{-\frac{1}{2}} \left( \sigma^2_e \right)^{-\frac{N}{2}}
+\\
+&\times \exp \left[ -\frac{1}{2}
+\left(
+(Y - \rho \mathbf{W}_1 Y - X\beta - \Delta\alpha)'\frac{\Psi(\lambda)^{-1}}{\sigma^2_e}(Y - \rho \mathbf{W}_1 Y - X\beta - \Delta\alpha)
+\right)
+\right]
+\end{split}
+\end{equation}
+By conditioning on $\alpha$, we imply that upper-level parameters $(\gamma, \sigma^2_\alpha, \phi, \theta)$ are also contained in the conditioning. The lower-level model is made more tractable by exploiting this inherent structure. Since $\mathcal{L}(\alpha | \phi, \theta, \gamma, \sigma^2_\alpha)$ is similar in form as $\mathcal{L}(Y|\cdots)$, the upper-level likelihood is also at hand:
+\begin{equation}
+\begin{split}
+\mathcal{L}(\alpha | \phi, \theta, \gamma, \sigma^2_\alpha) &=
+|I - \phi\mathbf{W}_2|
+\times |\Psi(\theta)|^{-\frac{1}{2}}\left(\sigma^2_\alpha\right)^{-\frac{J}{2}}
+\\
+&~ ~ ~ ~ \times \exp \left[ -\frac{1}{2} \left(
+(\alpha - \phi \mathbf{W}_2\alpha - Z\gamma)'
+\frac{\Psi(\theta)^{-1}}{\sigma^2_\alpha}
+(\alpha - \phi \mathbf{W}_2\alpha - Z\gamma)
+\right) \right]
+\end{split}
+\end{equation}
+Using these two likelihoods, deriving the full conditionals for the posterior distribution is possible.
+\section{Priors}
+Gibbs sampling strategies provide significant gains when conjugate priors are used. Therefore, common conjugate families for hierarchical normal models will be used. Specifically:
+\begin{equation}
+  \begin{split}
+    \sigma^2_e &\sim IG(a_e, b_e) \\
+    \sigma^2_\alpha &\sim IG(a_\alpha, b_\alpha) \\
+    \beta &\sim \mathcal{N}(\mu_\beta, \Sigma_{\beta0})\\
+    \gamma &\sim \mathcal{N}(\mu_\gamma, \Sigma_{\gamma0})\\
+  \end{split}
+\end{equation}
+
+\section{Conditional Posteriors}
+\subsection{Lower-Level Effects $\beta$}
+\begin{equation}
+P(\beta|\cdots) \propto \mathcal{N}(\Sigma_\beta b, \Sigma_\beta)
+\end{equation}
+\begin{align}
+  &\Sigma_\beta = \left( X'\Sigma^{-1}_YX + \Sigma^{-1}_{\beta0} \right)^{-1}
+&b = \left( X'\Sigma^{-1}_Y(AY - \Delta\alpha) + \Sigma^{-1}_{\beta0}\mu_\beta\right)
+\end{align}
+
+\subsection{Upper-Level Effects $\gamma$}
+\begin{equation}
+  P(\gamma|\cdots) \propto \mathcal{N}(\Sigma_\gamma g_n, \Sigma_\gamma )
+\end{equation}
+\begin{align}
+&\Sigma_\gamma = \left(Z'\Sigma^{-1}_\alpha Z + \Sigma^{-1}_{\gamma0} \right)^{-1}
+&g_n = \left(Z'\Sigma^{-1}_\alpha B\alpha + \Sigma^{-1}_{\gamma0}\mu_\gamma \right)
+\end{align}
+
+\subsection{Upper-Level Outcomes $\alpha$}
+\begin{equation}
+P(\alpha|\cdots) \propto \mathcal{N}(\Sigma_a b_a, \Sigma_a)
+\end{equation}
+\begin{align}
+&b_a = \left(\Delta'\Sigma^{-1}_Y(AY - X\beta)
+                + B'\Sigma^{-1}_\alpha Z\gamma \right)
+&\Sigma_a = \left(\Delta'\Sigma^{-1}_Y\Delta
+                  + B'\Sigma_\alpha^{-1}B\right)^{-1}
+\end{align}
+
+\subsection{Lower-Level Variance $\sigma^2_e$}
+Let $\eta_Y = AY - X\beta - \Delta\alpha$.
+\begin{equation}
+  P(\sigma^2_e|\cdots) \propto IG\left(\frac{N}{2} + a_{e}, \frac{\eta_Y'\Psi(\lambda)^{-1}\eta_Y}{2} + b_{e} \right)
+\end{equation}
+
+\subsection{Upper-Level Variance $\sigma^2_\alpha$}
+Let $\eta_\alpha = B\alpha - Z\gamma$.
+\begin{equation}
+  P(\sigma^2_\alpha | \cdots) \propto IG\left(\frac{J}{2} + a_\alpha, \frac{\eta_\alpha'\Psi(\theta)^{-1}\eta_\alpha}{2}
++ b_{\alpha}\right)
+\end{equation}
+
+\subsection{Lower-Level Endogenous Autocorrelation $\rho$}
+\begin{equation}
+  P(\rho | \cdots) \propto |I - \rho \mathbf{W}_1|
+\exp
+\left[
+  -\frac{1}{2\sigma^2_e}
+   \eta_Y'\Psi(\lambda)^{-1}\eta_Y
+\right]
+\times P(\rho)
+\end{equation}
+
+\subsection{Lower-Level Error Autocorrelation $\lambda$}
+\begin{equation}
+  P(\lambda | \cdots) \propto \lvert \Psi(\lambda) \rvert^{-\frac{1}{2}}
+    \exp\left[-\frac{1}{2\sigma^2_e}
+    \eta_Y'\Psi(\lambda)^{-1}\eta_Y\right] \times P(\lambda)
+\end{equation}
+
+\subsection{Upper-Level Endogenous Autocorrelation $\phi$}
+\begin{equation}
+  P(\phi | \cdots) \propto |I - \phi \mathbf{W}_2| \exp
+\left[
+  -\frac{1}{2\sigma^2_\alpha}
+   \eta_\alpha'\Psi(\theta)^{-1}\eta_\alpha
+\right] \times P(\phi)
+\end{equation}
+
+\subsection{Upper-Level Error Autocorrelation $\theta$}
+\begin{equation}
+  P(\theta | \cdots) 
+\propto \lvert \Psi(\theta) \rvert^{-\frac{1}{2}}
+    \exp\left[-\frac{1}{2\sigma^2_\alpha}
+    \eta_\alpha'\Psi(\theta)^{-1}\eta_\alpha\right] \times P(\theta)
+\end{equation}
+
+\section{Restrictions}
+\begin{itemize}
+  \item When $X_2$ = 0, single level.
+  \item When $X_2$ = 1 and $X_1$ contains no constant, varying-intercept.
+  \item When $X_2$ = 1 and $Z = 0$, variance components.
+  \item Otherwise, varying slope/parameter.
+\end{itemize}
+
+\end{document}
