@@ -1,5 +1,8 @@
 from warnings import warn as Warn
 from datetime import datetime as dt
+import pysal as ps
+import sqlite3 as sql
+from .sqlite import head_to_sql, start_sql
 
 class Sampler_Mixin(object):
     def __init__(self):
@@ -15,11 +18,6 @@ class Sampler_Mixin(object):
         n_samples      :   int
                         number of samples from the joint posterior density to
                         take
-        pop         :   bool
-                        whether to eject the trace from the sampler. If true,
-                        this function will return a namespace containing the
-                        results of the sampler during the run, and the sampler's
-                        trace will be refreshed at the end. 
 
         Returns
         -------
@@ -48,6 +46,83 @@ class Sampler_Mixin(object):
         Take exactly one sample from the joint posterior distribution
         """
         self._sample()
+        self.cycles += 1
         for param in self.traced_params:
             getattr(self.trace, param).append(getattr(self.state, param))
-        self.cycles += 1
+        if self.database is not None:
+            head_to_sql(self, self._cur, self._cxn)
+            for param in self.traced_params:
+                self.trace[param] = [getattr(self.trace, param)[-1]]
+
+    @property
+    def database(self):
+        return getattr(self, '_db', None)
+
+    @database.setter
+    def database(self, filename):
+        self._cxn, self._cur = start_sql(self)
+        self._db = filename
+
+    @classmethod
+    def from_st(cls, state, trace, model_type=None):
+        if model_type == None:
+            out = cls()
+            out.state = state
+            out.trace = trace
+        else:
+            X = np.zeros((9,1))
+            Y = np.zeros((9,1))
+            W = ps.lat2W(3,3)
+            M = ps.lat2W(2,2)
+            membership = np.array([0,0,1,1,2,2,2,3,3]),
+            try:
+                out = model_type(X, Y, 
+                                 M=M, W=W, 
+                                 membership=membership,
+                                 n_samples=0)
+            except TypeError:
+                try:
+                    out = model_type(X, Y, 
+                                     M=M,  
+                                     membership=membership,
+                                     n_samples=0)
+                except TypeError:
+                    out = model_type(X, Y, 
+                                     W=W,  
+                                     membership=membership,
+                                     n_samples=0)
+            out.state = state
+            out.trace = trace
+        return out
+
+def _from_st(cls, state, trace):
+    if model_type == None:
+        out = cls()
+        out.state = state
+        out.trace = trace
+    else:
+        #build a dummy model
+        X = np.zeros((9,1))
+        Y = np.zeros((9,1))
+        W = ps.lat2W(3,3)
+        M = ps.lat2W(2,2)
+        membership = np.array([0,0,1,1,2,2,2,3,3]),
+        try:
+            out = model_type(X, Y, 
+                             M=M, W=W, 
+                             membership=membership,
+                             n_samples=0)
+        except TypeError:
+            try:
+                out = model_type(X, Y, 
+                                 M=M,  
+                                 membership=membership,
+                                 n_samples=0)
+            except TypeError:
+                out = model_type(X, Y, 
+                                 W=W,  
+                                 membership=membership,
+                                 n_samples=0)
+        out.state = state
+        out.trace = Trace(**{k:[v] for k,v in trace._data.items()})
+    return out
