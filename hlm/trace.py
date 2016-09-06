@@ -1,7 +1,6 @@
 import pandas as pd
 from .plotting.traces import plot_trace as _plt
 import numpy as np
-from six import iteritems as diter
 
 PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 
@@ -31,10 +30,10 @@ class Trace(dict):
 
     @property
     def _data(self):
-        return {k:v for k,v in diter(self.__dict__) if k not in PUBLIC_DICT_ATTS}
+        return {k:v for k,v in self.__dict__.items() if k not in PUBLIC_DICT_ATTS}
 
     def __repr__(self):
-        innards = ', '.join(['{}:{}'.format(k,v) for k,v in diter(self._data)])
+        innards = ', '.join(['{}:{}'.format(k,v) for k,v in self._data.items()])
         return '{%s}' % innards
     
     def __getitem__(self, val):
