@@ -1,9 +1,13 @@
 import sqlite3 as sql
-import dill as pkl
 import numpy as np
 import os
 import sys
 from warnings import warn
+try:
+    import dill as pkl
+except ImportError as E:
+    E.msg = 'The `dill` module is required to use the sqlite backend. '+E.msg
+    warn(E.msg, stacklevel=2)
 try:
     from hlm.trace import Trace
 except ImportError:

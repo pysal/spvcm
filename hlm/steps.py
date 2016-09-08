@@ -1,4 +1,5 @@
 import numpy as np
+MAX_SLICE = 1000
 
 def inversion(pdvec, grid):
     """
@@ -67,3 +68,25 @@ def metropolis(state, current, proposal, logp, configs):
         outval = current
         accepted = False
     return outval, accepted
+
+def slicer(state, current, logp, configs):
+    """
+    Implements slice sampling on a bounded log-concave parameter. This allows
+    for no stepping-out to be needed, since the bounds provide the X range and
+    the function provides the Y range. 
+    """
+    current_logp = logp(state, current)
+    low, hi = configs.bounds
+    n_iterations = 0
+    # p. 712 of Neal defines this auxiliary variable on the log scale
+    slice_height = current_logp - np.random.exponential()
+    while True:
+        candidate = np.random.uniform(low, hi)
+        cand_logp = logp(state, candidate)
+        if slice_height <= cand_logp:
+            return candidate, True
+        n_iterations += 1
+        if n_iterations > MAX_SLICE:
+            warn('Slicing is failing to find an effective candidate. '
+                 'Using a metropolis update.', stacklevel=2)
+            return metropolis(state, current, logp, configs)
