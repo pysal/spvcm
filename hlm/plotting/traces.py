@@ -57,4 +57,5 @@ def plot_trace(model, burn=0, varnames=None, trace=None, kde_kwargs={}, trace_kw
                         **kde_kwargs)
         ax[i,0].plot(this_param[burn:], linewidth=.5, **trace_kwargs)
         ax[i,1].set_title(parameter)
+    fig.tight_layout()
     return fig, ax

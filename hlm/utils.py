@@ -178,7 +178,7 @@ def se_covariance(param, W):
     """
     half = speye_like(W) - param * W
     to_inv = half.T.dot(half)
-    return np.linalg.inv(half.toarray())
+    return np.linalg.inv(to_inv.toarray())
 
 def ind_covariance(param, W):
     """
