@@ -5,21 +5,25 @@ import copy
 
 from ...both_levels.generic import Base_Generic
 from ... import verify
-from ...utils import se_covariance
+from ...utils import se_covariance, ind_covariance
+from .sample import sample
+from warnings import warn
 
 
-SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Rho']
+SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
 
 class Base_Upper_SE(Base_Generic):
+    _sample = sample
     """
     The class that actually ends up setting up the Generic model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the
     sample function n_samples times to the state. 
     """
     def __init__(self, y, X, M, Delta, n_samples=1000, **_configs):
-        super(Base_Upper_SE, self).__init__(y, X, np.eye(Delta.shape[1]), M, Delta, 
+        W = np.eye((Delta.shape[0]))
+        super(Base_Upper_SE, self).__init__(y, X, W, M, Delta, 
                                       n_samples=0, skip_covariance=True, **_configs)
-        self.state.Psi_1 = lambda x, Wmat: np.eye(M.shape[0])
+        self.state.Psi_1 = ind_covariance 
         self.state.Psi_2 = se_covariance
         self._setup_covariance()
         original_traced = copy.deepcopy(self.traced_params)
@@ -27,8 +31,12 @@ class Base_Upper_SE(Base_Generic):
         self.traced_params = SAMPLERS
         for param in to_drop:
             del self.trace[param]
-
-        self.sample(n_samples)
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging purposes. \n {}'.format(e))
+            
 
 class Upper_SE(Base_Upper_SE): 
     """

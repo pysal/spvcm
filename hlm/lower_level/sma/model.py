@@ -19,16 +19,22 @@ class Base_Lower_SMA(Base_Generic):
     def __init__(self, y, X, W, Delta, n_samples=1000, **_configs):
         super(Base_Lower_SMA, self).__init__(y, X, W, np.eye(Delta.shape[1]), Delta, 
                                       n_samples=0, skip_covariance=True, **_configs)
+        st = self.state
         self.state.Psi_1 = sma_covariance
-        self.state.Psi_2 = lambda x, Wmat: np.eye(W.shape[0])
+        self.state.Psi_2 = lambda x, Wmat: np.eye(Wmat.shape[0])
         self._setup_covariance()
         original_traced = copy.deepcopy(self.traced_params)
         to_drop = [k for k in original_traced if k not in SAMPLERS]
         self.traced_params = SAMPLERS
+        st.Rho_min, st.Rho_max = -st.Rho_max, -st.Rho_min
         for param in to_drop:
             del self.trace[param]
 
-        self.sample(n_samples)
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            Warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging. \n {}'.format(e))
 
 class Lower_SMA(Base_Lower_SMA): 
     """

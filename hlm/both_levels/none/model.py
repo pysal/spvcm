@@ -42,7 +42,14 @@ class Base_MVCM(Sampler_Mixin):
         self._setup_covariance()
         
         self.cycles = 0
-        self.sample(n_samples)
+        
+
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            Warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging. \n {}'.format(e))
+
 
     def _setup_data(self, **hypers):
         In = np.identity(self.state.N)
@@ -50,15 +57,11 @@ class Base_MVCM(Sampler_Mixin):
         ## Prior specifications
         Sigma2_a0 = hypers.pop('Sigma2_a0', .001)
         Sigma2_b0 = hypers.pop('Sigma2_b0', .001)
-        Sigma2_an = self.state.N / 2 + Sigma2_a0
         Betas_cov0 = hypers.pop('Betas_cov0', np.eye(self.state.p) * 100)
-        Betas_cov0i = np.linalg.inv(Betas_cov0)
         Betas_mean0 = hypers.pop('Betas_mean0', np.zeros((self.state.p, 1)))
         Tau2_a0 = hypers.pop('Tau2_a0', .001)
         Tau2_b0 = hypers.pop('Tau2_b0', .001)
-        Tau2_an = self.state.J / 2 + Tau2_a0
 
-        Betas_covm = np.dot(Betas_cov0, Betas_mean0)
 
         XtX = np.dot(self.state.X.T, self.state.X)
         DeltatDelta = np.dot(self.state.Delta.T, self.state.Delta)
@@ -67,6 +70,17 @@ class Base_MVCM(Sampler_Mixin):
         self.state.update(innovations)
 
         return hypers
+    
+    def _finalize_invariants(self):
+        """
+        This computes derived properties of hyperparameters that do not change 
+        over iterations. This is called one time before sampling. 
+        """
+        st = self.state
+        st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
+        st.Betas_covm = np.dot(st.Betas_cov0, st.Betas_mean0)
+        st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
+        st.Tau2_an = self.state.J / 2 + st.Tau2_a0
 
     def _setup_configs(self, #would like to make these keyword only using * 
                  #multi-parameter options

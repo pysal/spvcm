@@ -12,7 +12,7 @@ from pysal.spreg.utils import sphstack, spdot
 from .sample import sample
 from ...abstracts import Sampler_Mixin
 from ... import verify
-from ...utils import speigen_range, splogdet
+from ...utils import speigen_range, splogdet, ind_covariance
 from ...trace import Trace
 
 
@@ -26,7 +26,7 @@ class Base_Generic(Sampler_Mixin):
     """
     def __init__(self, y, X, W, M, Delta, n_samples=1000, **_configs):
         
-        skip_covariance = _configs.pop('skip_cov', False)
+        skip_covariance = _configs.pop('skip_covariance', False)
         
         N, p = X.shape
         _N, J = Delta.shape
@@ -44,28 +44,40 @@ class Base_Generic(Sampler_Mixin):
         self._setup_initial_values()
 
         if not skip_covariance: 
-            self.state.Psi_1 = lambda par, Wobj: np.eye(Wobj.shape[0])
-            self.state.Psi_2 = self.state.Psi_1
+            self.state.Psi_1 = ind_covariance 
+            self.state.Psi_2 = ind_covariance
             self._setup_covariance()
+
         
         self.cycles = 0
-        self.sample(n_samples)
+
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            Warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging. \n {}'.format(e))
 
     def _setup_data(self, **hypers):
+        """
+        This sets up the data and hyperparameters of the problem. 
+        If the hyperparameters are to be adjusted, pass them as keyword arguments. 
+
+        Arguments
+        ----------
+        None
+
+        """
         In = np.identity(self.state.N)
         Ij = np.identity(self.state.J)
         ## Prior specifications
         Sigma2_a0 = hypers.pop('Sigma2_a0', .001)
         Sigma2_b0 = hypers.pop('Sigma2_b0', .001)
-        Sigma2_an = self.state.N / 2 + Sigma2_a0
         Betas_cov0 = hypers.pop('Betas_cov0', np.eye(self.state.p) * 100)
-        Betas_cov0i = np.linalg.inv(Betas_cov0)
         Betas_mean0 = hypers.pop('Betas_mean0', np.zeros((self.state.p, 1)))
         Tau2_a0 = hypers.pop('Tau2_a0', .001)
         Tau2_b0 = hypers.pop('Tau2_b0', .001)
-        Tau2_an = self.state.J / 2 + Tau2_a0
-
-        Betas_covm = np.dot(Betas_cov0, Betas_mean0)
+        LogLambda0 = hypers.pop('LogLambda0', None)
+        LogRho0 = hypers.pop('LogRho0', None)
 
         XtX = np.dot(self.state.X.T, self.state.X)
         DeltatDelta = np.dot(self.state.Delta.T, self.state.Delta)
@@ -74,17 +86,39 @@ class Base_Generic(Sampler_Mixin):
         self.state.update(innovations)
 
         return hypers
+    
+    def _finalize_invariants(self):
+        """
+        This computes derived properties of hyperparameters that do not change 
+        over iterations. This is called one time before sampling. 
+        """
+        st = self.state
+        st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
+        st.Betas_covm = np.dot(st.Betas_cov0, st.Betas_mean0)
+        st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
+        st.Tau2_an = self.state.J / 2 + st.Tau2_a0
+        if st.LogLambda0 is None:
+            eigenrange = st.Lambda_max - st.Lambda_min
+            Lambda_logprior = np.log(1/eigenrange)
+            def LogLambda0(value):
+                return Lambda_logprior
+            st.LogLambda0 = LogLambda0
+        if st.LogRho0 is None:
+            eigenrange = st.Rho_max - st.Rho_min
+            Rho_logprior = np.log(1/eigenrange)
+            def LogRho0(value):
+                return Rho_logprior
+            st.LogRho0 = LogRho0
 
     def _setup_configs(self, #would like to make these keyword only using * 
                  #multi-parameter options
-                 truncate='eigs', tuning=0, 
+                 tuning=0, 
                  #spatial parameter grid sample configurations:
                  rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
                  rho_proposal=stats.norm, rho_adapt_step=1.01,
                  #spatial parameter grid sample configurations:
                  lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6, 
-                 lambda_proposal=stats.norm, lambda_adapt_step=1.01,
-                 **kw):
+                 lambda_proposal=stats.norm, lambda_adapt_step=1.01):
         """
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
@@ -133,11 +167,9 @@ class Base_Generic(Sampler_Mixin):
         W_emin, W_emax = speigen_range(st.W)
         st.Rho_min = 1./W_emin
         st.Rho_max = 1./W_emax
-        st.LogRho0 = np.log(1/(st.Rho_max - st.Rho_min))
         M_emin, M_emax = speigen_range(st.M)
         st.Lambda_min = 1./M_emin
         st.Lambda_max = 1./M_emax
-        st.LogLambda0 = np.log(1/(st.Lambda_max - st.Lambda_min))
 
     def _setup_initial_values(self):
         """
@@ -165,9 +197,9 @@ class Base_Generic(Sampler_Mixin):
         st.PsiRho = st.Psi_1(st.Rho, st.W)
         st.PsiLambda = st.Psi_2(st.Lambda, st.M)
 
-        st.PsiSigma2 = st.PsiRho * st.Sigma2
+        st.PsiSigma2 = st.PsiRho.dot(st.In * st.Sigma2)
         st.PsiSigma2i = la.inv(st.PsiSigma2)
-        st.PsiTau2 = st.PsiLambda * st.Tau2
+        st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
         st.PsiTau2i = la.inv(st.PsiTau2)
         
         st.PsiRhoi = la.inv(st.PsiRho)

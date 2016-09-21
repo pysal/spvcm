@@ -15,12 +15,12 @@ def sample(Model):
     ### N(Sb, S) where
     ### S = (X' Sigma^{-1}_Y X + S_0^{-1})^{-1}
     ### b = X' Sigma^{-1}_Y (Y - Delta Alphas) + S^{-1}\mu_0
-    covm_update = st.X.T.dot(st.PsiSigma2i).dot(st.X)
+    covm_update = st.X.T.dot(st.PsiRhoi).dot(st.X) / st.Sigma2
     covm_update += st.Betas_cov0i
     covm_update = la.inv(covm_update) 
 
     resids = st.y - st.Delta.dot(st.Alphas)
-    XtSresids = st.X.T.dot(st.PsiSigma2i).dot(resids)
+    XtSresids = st.X.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
     mean_update = XtSresids + st.Betas_cov0i.dot(st.Betas_mean0)
     mean_update = np.dot(covm_update, mean_update)
     st.Betas = chol_mvn(mean_update, covm_update)
@@ -34,12 +34,12 @@ def sample(Model):
     ### Where
     ### S = (Delta'Sigma_Y^{-1}Delta + Sigma_Alpha^{-1})^{-1}
     ### b = (Delta'Sigma_Y^{-1}(Y - X\beta) + 0)
-    covm_update = st.Delta.T.dot(st.PsiSigma2).dot(st.Delta)
-    covm_update += st.PsiTau2i
+    covm_update = st.Delta.T.dot(st.PsiRhoi).dot(st.Delta) / st.Sigma2
+    covm_update += st.PsiLambdai / st.Tau2
     covm_update = la.inv(covm_update)
 
     resids = st.y - st.XBetas
-    mean_update = st.Delta.T.dot(st.PsiSigma2i).dot(resids)
+    mean_update = st.Delta.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
     mean_update = np.dot(covm_update, mean_update)
     st.Alphas = chol_mvn(mean_update, covm_update)
     st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
@@ -70,7 +70,7 @@ def sample(Model):
                             logp=logp_rho)
     
     st.PsiRho = st.Psi_1(st.Rho, st.W)
-    st.PsiSigma2 = st.PsiRho * st.Sigma2
+    st.PsiSigma2 = st.PsiRho.dot(st.In*st.Sigma2)
     st.PsiSigma2i = la.inv(st.PsiSigma2)
     st.PsiRhoi = la.inv(st.PsiRho)
         
@@ -80,11 +80,9 @@ def sample(Model):
     st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st, 
                                logp=logp_lambda)
     st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-    st.PsiTau2 = st.PsiLambda * st.Tau2
+    st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
     st.PsiTau2i = la.inv(st.PsiTau2)
     st.PsiLambdai = la.inv(st.PsiLambda)
-
-    Model.cycles += 1
 
 #############################
 # SPATIAL SAMPLE METHODS    #
@@ -148,8 +146,7 @@ def logp_rho(state, val):
     eta = st.y - st.XBetas - st.DeltaAlphas
     kernel = eta.T.dot(PsiRhoi).dot(eta) / st.Sigma2
 
-    return (-.5*logdet -.5 * kernel - (st.N/2)*np.log(np.pi*2*st.Sigma2) 
-            + st.LogRho0)
+    return -.5*logdet -.5 * kernel + st.LogRho0(val)
 
 def logp_lambda(state, val):
     """
@@ -170,5 +167,4 @@ def logp_lambda(state, val):
 
     kernel = st.Alphas.T.dot(PsiLambdai).dot(st.Alphas) / st.Tau2
 
-    return (-.5*logdet - .5*kernel - (st.J/2)*np.log(np.pi*2*st.Tau2) 
-            + st.LogLambda0)
+    return -.5*logdet - .5*kernel + st.LogLambda0(val)

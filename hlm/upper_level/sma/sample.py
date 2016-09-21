@@ -5,6 +5,7 @@ import numpy as np
 import numpy.linalg as la
 from ...utils import splogdet, chol_mvn
 from ...steps import metropolis
+from ...both_levels.generic.sample import logp_lambda, sample_spatial
 
 def sample(Model):
     st = Model.state
@@ -51,8 +52,6 @@ def sample(Model):
     ### IG(J/2 + a0, u'(\Psi(\lambda))^{-1}u * .5 + b0)
     bn = st.Alphas.T.dot(st.PsiLambdai).dot(st.Alphas) * .5 + st.Tau2_b0
     st.Tau2 = stats.invgamma.rvs(st.Tau2_an, scale=bn)
-    st.PsiTau2 = st.Ij * st.Tau2
-    st.PsiTau2i = la.inv(st.PsiTau2)
     
     ### Sample the response aspatial variance parameter
     ### P(Sigma2 | . ) \propto L(Y | .) \dot P(Sigma2)
@@ -60,7 +59,15 @@ def sample(Model):
     ### IG(N/2 + a0, eta'Psi(\rho)^{-1}eta * .5 + b0)
     ### Where eta is the linear predictor, Y - X\beta + \DeltaAlphas
     eta = st.y - st.XBetas - st.DeltaAlphas
-    bn = eta.T.dot(st.PsiRhoi).dot(eta) * .5 + st.Sigma2_b0
+    bn = eta.T.dot(eta) * .5 + st.Sigma2_b0
     st.Sigma2 = stats.invgamma.rvs(st.Sigma2_an, scale=bn)
-    
-    Model.cycles += 1
+        
+    ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho) 
+    ### is 
+    ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
+    st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st, 
+                               logp=logp_lambda)
+    st.PsiLambda = st.Psi_2(st.Lambda, st.M)
+    st.PsiTau2 = st.PsiLambda * st.Tau2
+    st.PsiTau2i = la.inv(st.PsiTau2)
+    st.PsiLambdai = la.inv(st.PsiLambda)

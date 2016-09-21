@@ -7,11 +7,17 @@ class Base_SMASMA(Base_Generic):
     def __init__(self, Y, X, W, M, Delta, n_samples=1000, **configs):
         super(Base_SMASMA, self).__init__(Y, X, W, M, Delta, n_samples=0, 
                                         skip_covariance=True, **configs)
+        st = self.state
         self.state.Psi_1 = sma_covariance
         self.state.Psi_2 = sma_covariance
         self._setup_covariance()
-
-        self.sample(n_samples)
+        st.Rho_min, st.Rho_max = -st.Rho_max, -st.Rho_min
+        st.Lambda_min, st.Lambda_max = -st.Lambda_max, -st.Lambda_min
+        try:
+            self.sample(n_samples)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            warn('Encountered the following LinAlgError. '
+                 'Model will return for debugging purposes. \n {}'.format(e))
 
 class SMASMA(Base_SMASMA):
     def __init__(self, y, X, M, W, Z=None, Delta=None, membership=None, 

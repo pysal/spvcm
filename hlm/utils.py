@@ -122,7 +122,9 @@ def spinv(M):
 def chol_mvn(Mu, Sigma):
     """
     Sample from a Multivariate Normal given a mean & Covariance matrix, using
-    cholesky decomposition of the covariance
+    cholesky decomposition of the covariance. If the cholesky decomp fails due 
+    to the matrix not being strictly positive definite, then the 
+    numpy.random.multivariate_normal will be used.
 
     That is, new values are generated according to :
     New = Mu + cholesky(Sigma) . N(0,1)
@@ -141,10 +143,15 @@ def chol_mvn(Mu, Sigma):
     np.ndarray of size (p,1) containing draws from the multivariate normal
     described by MVN(Mu, Sigma)
     """
-    D = scla.cholesky(Sigma, overwrite_a = True)
-    e = np.random.normal(0,1,size=Mu.shape)
-    kernel = np.dot(D.T, e)
-    return Mu + kernel
+    try:
+        D = scla.cholesky(Sigma, overwrite_a = True)
+        e = np.random.normal(0,1,size=Mu.shape)
+        kernel = np.dot(D.T, e)
+        out = Mu + kernel
+    except np.linalg.LinAlgError:
+        out = np.random.multivariate_normal(Mu.flatten(), Sigma)
+        out = out.reshape(Mu.shape)
+    return out
 
 def sma_covariance(param, W):
     # type (float, W) -> np.dnarray
@@ -171,4 +178,14 @@ def se_covariance(param, W):
     """
     half = speye_like(W) - param * W
     to_inv = half.T.dot(half)
-    return np.linalg.inv(half.toarray())
+    return np.linalg.inv(to_inv.toarray())
+
+def ind_covariance(param, W):
+    """
+    This returns a covariance matrix for a standard diagonal specification:
+    
+    I
+
+    and always returns a dense matrix. Thus, it ignores param entirely.
+    """
+    return np.eye(W.shape[0])
