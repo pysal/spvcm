@@ -1,5 +1,6 @@
 from warnings import warn as Warn
 from datetime import datetime as dt
+import numpy as np
 import pysal as ps
 import sqlite3 as sql
 from .sqlite import head_to_sql, start_sql
@@ -64,7 +65,7 @@ class Sampler_Mixin(object):
         self._db = filename
 
     @classmethod
-    def from_st(cls, state, trace, model_type=None):
+    def from_other(cls, state, trace, model_type=None):
         if model_type == None:
             out = cls()
             out.state = state
@@ -94,8 +95,13 @@ class Sampler_Mixin(object):
             out.state = state
             out.trace = trace
         return out
+    
+    def deepcopy(self):
+        return self.from_other(copy.deepcopy(self.state), 
+                               copy.deepcopy(self.trace),
+                               model_type = type(self))
 
-def _from_st(cls, state, trace):
+def from_st(cls, state, trace):
     if model_type == None:
         out = cls()
         out.state = state

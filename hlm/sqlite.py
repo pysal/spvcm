@@ -38,7 +38,7 @@ def start_sql(model, tracename='model_trace.db'):
     """
     if os.path.isfile(tracename):
         raise Exception('Will not overwrite existing trace model_trace.db')
-    cxn = sql.connect('./model_trace.db')
+    cxn = sql.connect(tracename)
     cursor = cxn.cursor()
     cursor.execute(customize_create_template(model.traced_params, 'trace'))
     return cxn, cursor

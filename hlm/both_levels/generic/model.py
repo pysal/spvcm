@@ -33,10 +33,10 @@ class Base_Generic(Sampler_Mixin):
         self.state = Trace(**{'X':X, 'y':y, 'M':M, 'W':W, 'Delta':Delta,
                            'N':N, 'J':J, 'p':p })
         self.trace = Trace()
-        self.traced_params = SAMPLERS
-        extras = _configs.pop('extra_tracked_params', None)
+        self.traced_params = copy.deepcopy(SAMPLERS)
+        extras = _configs.pop('extra_traced_params', None)
         if extras is not None:
-            self.traced_params.extend(extra_tracked_params)
+            self.traced_params.extend(extras)
         self.trace.update({k:[] for k in self.traced_params})
         leftovers = self._setup_data(**_configs)
         self._setup_configs(**leftovers)

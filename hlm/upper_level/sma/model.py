@@ -4,9 +4,12 @@ import numpy as np
 import copy
 
 from ...both_levels.generic import Base_Generic
+from ...both_levels.generic.model import SAMPLERS as generic_params
 from ... import verify
 from ...utils import sma_covariance
 from .sample import sample
+from ...trace import Trace
+
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
@@ -27,10 +30,10 @@ class Base_Upper_SMA(Base_Generic):
         self.state.Psi_2 = sma_covariance
         self._setup_covariance()
         original_traced = copy.deepcopy(self.traced_params)
-        to_drop = [k for k in original_traced if k not in SAMPLERS]
-        self.traced_params = SAMPLERS
-        for param in to_drop:
-            del self.trace[param]
+        extras = [k for k in original_traced if k not in generic_params]
+        self.traced_params = copy.deepcopy(SAMPLERS)
+        self.traced_params.extend(extras)
+        self.trace = Trace(**{k:[] for k in self.traced_params})
        
         st.Lambda_min, st.Lambda_max = -st.Lambda_max, -st.Lambda_min
 
