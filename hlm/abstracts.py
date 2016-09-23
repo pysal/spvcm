@@ -132,3 +132,30 @@ def from_st(cls, state, trace):
         out.state = state
         out.trace = Trace(**{k:[v] for k,v in trace._data.items()})
     return out
+
+
+class Hashmap(dict):
+    """
+    A dictionary with dot access on attributes
+    """
+    def __init__(self, **kw):
+        super(Hashmap, self).__init__(**kw)
+        for k in kw:
+            self[k] = kw[k]
+
+    def __getattr__(self, attr):
+        return self.get(attr)
+    
+    def __setattr__(self, key, val):
+        self.__setitem__(key,value)
+
+    def __setitem(self, key, value):
+        super(Hashmap, self).__setitem__(key,value)
+        self.__dict__.update({key:value})
+
+    def __delattr__(self, item):
+        self.__delitem__(item)
+
+    def __delitem(self, key):
+        super(Hashmap, self).__delitem__(key)
+        del self.__dict__[key]

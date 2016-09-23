@@ -11,7 +11,7 @@ PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
     """
     This is a utility function to set up the grid of matrix determinants over a
-    range of spatial parameters for a given W. 
+    range of spatial parameters for a given W.
     """
     if (parmin is None) and (parmax is None):
         parmin, parmax = speigen_range(W)
@@ -23,13 +23,51 @@ def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
     grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
     return grid
 
+def south():
+    """
+    Sets up the data for the US southern counties example.
+    
+    Returns
+    -------
+    dictionary
+    """
+    import pysal as ps
+    import numpy as np
+    import pandas as pd
+
+    data = ps.pdio.read_files(ps.examples.get_path('south.shp'))
+    data = data[data.STATE_NAME != 'District of Columbia']
+    X = data[['GI89', 'BLK90', 'HR90']].values
+    N = X.shape[0]
+    Z = data.groupby('STATE_NAME')['FH90'].mean()
+    Z = Z.values.reshape(-1,1)
+    J = Z.shape[0]
+    
+    Y = data.DNL90.values.reshape(-1,1)
+
+    W2 = ps.queen_from_shapefile(ps.examples.get_path('us48.shp'),
+                                 idVariable='STATE_NAME')
+    W2 = ps.w_subset(W2, ids=data.STATE_NAME.unique().tolist()) #only keep what's in the data
+    W1 = ps.queen_from_shapefile(ps.examples.get_path('south.shp'),
+                                 idVariable='FIPS')
+    W1 = ps.w_subset(W1, ids=data.FIPS.tolist()) #again, only keep what's in the data
+    
+    W1.transform = 'r'
+    W2.transform = 'r'
+    
+    membership = data.STATE_NAME.apply(lambda x: W2.id_order.index(x)).values
+    
+    d = {'X':X, 'Y':Y, 'Z':Z, 'W1':W1, 'W2':W2,
+         'N':N, 'J':J, 'data':data, 'membership':membership}
+    return d
+
 ####################
 # MATRIX UTILITIES #
 ####################
 
 def splogdet(matrix):
     """
-    compute the log determinant via an appropriate method. 
+    compute the log determinant via an appropriate method.
     """
     redo = False
     if spar.issparse(matrix):
@@ -73,7 +111,7 @@ spidentity_like = speye_like
 
 def speigen_range(matrix, retry=True, coerce=True):
     """
-    Construct the eigenrange of a potentially sparse matrix. 
+    Construct the eigenrange of a potentially sparse matrix.
     """
     if spar.issparse(matrix):
         try:
@@ -102,7 +140,7 @@ def speigen_range(matrix, retry=True, coerce=True):
                 speigen_range(spmatrix)
             else:
                 Warn('Bailing...')
-                raise e 
+                raise e
     return emin, emax
 
 def spinv(M):
@@ -122,8 +160,8 @@ def spinv(M):
 def chol_mvn(Mu, Sigma):
     """
     Sample from a Multivariate Normal given a mean & Covariance matrix, using
-    cholesky decomposition of the covariance. If the cholesky decomp fails due 
-    to the matrix not being strictly positive definite, then the 
+    cholesky decomposition of the covariance. If the cholesky decomp fails due
+    to the matrix not being strictly positive definite, then the
     numpy.random.multivariate_normal will be used.
 
     That is, new values are generated according to :

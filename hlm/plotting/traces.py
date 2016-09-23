@@ -1,6 +1,7 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
+from .. import trace as trc
 
 def plot_trace(model, burn=0, varnames=None, trace=None, kde_kwargs={}, trace_kwargs={}):
     """
@@ -57,5 +58,39 @@ def plot_trace(model, burn=0, varnames=None, trace=None, kde_kwargs={}, trace_kw
                         **kde_kwargs)
         ax[i,0].plot(this_param[burn:], linewidth=.5, **trace_kwargs)
         ax[i,1].set_title(parameter)
+    fig.tight_layout()
+    return fig, ax
+
+def plot_multitrace(mt, burn=0, varnames=None, kde_kwargs={}, trace_kwargs ={}):
+    traces = [mt[k] for k in mt.varnames if k.startswith('Chain_') 
+                                        and isinstance(mt[k], trc.Trace)]
+    if varnames is None:
+        varnames = traces[0].varnames
+    elif isinstance(varnames, str):
+        varnames = [varnames]
+    fig, ax = plt.subplots(len(varnames), 2, figsize=(1.6*6, 12), sharey='row')
+    for trace in traces:
+        for i, parameter in enumerate(varnames):
+            this_param = np.asarray(trace[parameter])
+            if len(this_param.shape) == 3:
+                a, b, _ = this_param.shape
+                this_param = this_param.reshape(a,b)
+
+            if len(this_param.shape) == 2:
+                if this_param.shape[-1] == 1:
+                    sns.kdeplot(this_param.flatten()[burn:], 
+                                shade=True, vertical=True, ax=ax[i,1],
+                                **kde_kwargs)
+                else:
+                    for param in this_param.T:
+                        sns.kdeplot(param[burn:], shade=True, 
+                                    vertical=True, ax=ax[i,1],
+                                    **kde_kwargs)
+            else:
+                sns.kdeplot(this_param[burn:],
+                            shade=True, vertical=True, ax=ax[i,1],
+                            **kde_kwargs)
+            ax[i,0].plot(this_param[burn:], linewidth=.5, **trace_kwargs)
+            ax[i,1].set_title(parameter)
     fig.tight_layout()
     return fig, ax

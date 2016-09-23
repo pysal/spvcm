@@ -8,8 +8,8 @@ from scipy.spatial import distance as d
 from .utils import explode
 from .sample import sample, H
 from pysal.spreg import spdot
-from ..trace import Trace as Trace
-from ..abstracts import Sampler_Mixin
+from ...trace import Trace as Trace
+from ...abstracts import Sampler_Mixin
 
 class SVCP(Sampler_Mixin):
     """
