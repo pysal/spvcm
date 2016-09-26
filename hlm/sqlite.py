@@ -6,8 +6,8 @@ from warnings import warn
 try:
     import dill as pkl
 except ImportError as E:
-    E.msg = 'The `dill` module is required to use the sqlite backend. '+E.msg
-    warn(E.msg, stacklevel=2)
+    msg = 'The `dill` module is required to use the sqlite backend and was not found.'
+    warn(msg, stacklevel=2)
 try:
     from hlm.trace import Trace
 except ImportError:
@@ -58,8 +58,9 @@ def point_to_sql(model, cursor, connection, index=0):
     else:
         iteration = index
     ordered_point = (serialize(model.trace[param][index]) for param in model.traced_params)
-
-    cursor.execute(customize_insert_template(model.traced_params, 'trace'), (iteration, *list(ordered_point)))
+    to_insert = [iteration]
+    to_insert.extend(list(ordered_point))
+    cursor.execute(customize_insert_template(model.traced_params, 'trace'), tuple(to_insert))
     connection.commit()
 
 def trace_to_sql(model, cursor, connection):
@@ -68,8 +69,9 @@ def trace_to_sql(model, cursor, connection):
     """
     for i in range(model.cycles):
         ordered_point = (serialize(model.trace[param][i]) for param in model.traced_params)
-
-        cursor.execute(customize_insert_template(model.traced_params, 'trace'), (i, *list(ordered_point)))
+        to_insert = [i]
+        to_insert.extend(list(ordered_point))
+        cursor.execute(customize_insert_template(model.traced_params, 'trace'), tuple(to_insert))
     connection.commit()
     
 def trace_from_sql(filename, table='trace'):
@@ -103,7 +105,9 @@ def model_to_sql(model, cursor, connection):
     frozen_state = (serialize(model.state[k]) for k in frozen_state_keys)
     cursor.execute(customize_create_template(frozen_state_keys, 'state'))
     insert_template = customize_insert_template(frozen_state_keys, 'state')
-    cursor.execute(insert_template, (model.cycles, *list(frozen_state)))
+    to_insert = [model.cycles]
+    to_insert.extend(list(frozen_state))
+    cursor.execute(insert_template, tuple(to_insert)) 
     class_pkl = pkl.dumps(model.__class__) #want instance, not whole model
     cursor.execute(customize_create_template(['model_class'], 'model'))
     cursor.execute(customize_insert_template(['class'], 'model'), (None, class_pkl))
