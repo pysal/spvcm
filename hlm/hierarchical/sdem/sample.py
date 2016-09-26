@@ -10,7 +10,7 @@ def sample(SDEM):
     st = SDEM.state
 
     ### Draw Sigma2, level 1 variance
-    e1 = st.y - st.DeltaAlphas - st.XBetas
+    e1 = st.Y - st.DeltaAlphas - st.XBetas
 
     d1 = np.dot(e1.T, e1) / 2 
     d1 += st.Sigma2_prod # INVARIANT
@@ -20,7 +20,7 @@ def sample(SDEM):
 
     ### Draw Beta for level one covariates
     covm = la.inv(st.XtX / st.Sigma2 + st.Betas_cov0)
-    resids = st.y - np.dot(st.Delta, st.Alphas)
+    resids = st.Y - np.dot(st.Delta, st.Alphas)
     data_part = np.dot(st.X.T, resids) / st.Sigma2
     full_update = data_part + st.Betas_covm # INVARIANT
     mean = np.dot(covm, full_update)
@@ -33,7 +33,7 @@ def sample(SDEM):
     spatial_covm = st.BtB.dot(st.Ij / st.Tau2)
     covm = la.inv(scaled_emp_covm + spatial_covm)
 
-    mean_kernel = np.dot(st.Delta.T, (st.y - st.XBetas)) / st.Sigma2
+    mean_kernel = np.dot(st.Delta.T, (st.Y - st.XBetas)) / st.Sigma2
     BZGammas = spdot(st.B, np.dot(st.Z, st.Gammas))
     mean_spcorr = np.dot(st.BtB / st.Tau2, BZGammas) 
     mean = np.dot(covm, (mean_kernel + mean_spcorr))

@@ -14,7 +14,7 @@ def sample(SDM):
     st = SDM.state
 
     ### Sample the variance, Sigma
-    st.e1 = st.y - st.DeltaAlphas - st.XBetas
+    st.e1 = st.Y - st.DeltaAlphas - st.XBetas
     st.d1 = spdot(st.e1.T, st.e1) + st.Sigma2_prod  #vo is initial nu,
                                                     # inital inverse chi-squared 
                                                     # dof parameter. 
@@ -26,7 +26,7 @@ def sample(SDM):
     covm = spinv(st.XtX/st.Sigma2 + st.Betas_cov0)
 
     #this is invariant
-    xyda = spdot(st.X.T, (st.y - st.DeltaAlphas))
+    xyda = spdot(st.X.T, (st.Y - st.DeltaAlphas))
     mean = spdot(covm, xyda / st.Sigma2 + st.Betas_covm)
     st.Betas = chol_mvn(mean, covm)
     st.XBetas = spdot(st.X, st.Betas)
@@ -35,7 +35,7 @@ def sample(SDM):
     covm_kern = st.DeltatDelta / st.Sigma2
     covm_upper = spdot(st.B.T, st.B) / st.Tau2
     covm = spinv(covm_kern + covm_upper)
-    mean_lower = spdot(st.Delta.T, st.y - st.XBetas) / st.Sigma2
+    mean_lower = spdot(st.Delta.T, st.Y - st.XBetas) / st.Sigma2
     mean_upper = spdot(st.B.T, st.ZGammas) / st.Tau2
     mean = spdot(covm, mean_lower + mean_upper)
     st.Alphas = chol_mvn(mean, covm)

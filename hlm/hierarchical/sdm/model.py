@@ -10,10 +10,9 @@ from warnings import warn as Warn
 from pysal.spreg.utils import spdot
 from .sample import sample
 
-from ...abstracts import Sampler_Mixin
+from ...abstracts import Sampler_Mixin, Trace, Hashmap
 from ... import verify
 from ...utils import speigen_range 
-from ...trace import Trace
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Gammas', 'Rho']
@@ -24,20 +23,19 @@ class Base_HSDM(Sampler_Mixin):
     data, truncation, and initial parameters, and then attempts to apply the
     sample function n_samples times to the state. 
     """
-    def __init__(self, y, X, M, Z, Delta, n_samples=1000, **_configs):
+    def __init__(self, Y, X, M, Z, Delta, n_samples=1000, **_configs):
         
         N, p = X.shape
         WZ = M.dot(Z)
         Z = np.hstack((Z, WZ))
         J, q = Z.shape
-        self.state = Trace(**{'X':X, 'y':y, 'M':M, 'Z':Z, 'Delta':Delta,
-                           'N':N, 'J':J, 'p':p, 'q':q })
-        self.trace = Trace()
+        self.state = Hashmap(**{'X':X, 'y':Y, 'M':M, 'Z':Z, 'Delta':Delta,
+                                'N':N, 'J':J, 'p':p, 'q':q })
         self.traced_params = SAMPLERS
         extras = _configs.pop('extra_tracked_params', None)
         if extras is not None:
             self.traced_params.extend(extra_tracked_params)
-        self.trace.update({k:[] for k in self.traced_params})
+        self.trace = Trace(**{k:[] for k in self.traced_params})
         leftovers = self._setup_data(**_configs)
         self._setup_configs(**leftovers)
         self._setup_truncation()
@@ -84,9 +82,9 @@ class Base_HSDM(Sampler_Mixin):
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
         """
-        self.configs = Trace()
+        self.configs = Hashmap()
         self.configs.truncate = truncate
-        self.configs.Rho = Trace()
+        self.configs.Rho = Hashmap()
         self.configs.Rho.jump = rho_jump
         self.configs.Rho.ar_low = rho_ar_low
         self.configs.Rho.ar_hi = rho_ar_hi
@@ -141,7 +139,7 @@ class HSDM(Base_HSDM):
     """
     The class that intercepts & validates input
     """
-    def __init__(self, y, X, M, Z=None, Delta=None, membership=None, 
+    def __init__(self, Y, X, M, Z=None, Delta=None, membership=None, 
                  #data options
                  sparse = True, transform ='r', n_samples=1000, verbose=False,
                  **options):
@@ -159,5 +157,5 @@ class HSDM(Base_HSDM):
         self._verbose = verbose
         if Z is None:
             Z = np.zeros((J, 1))
-        super(HSDM, self).__init__(y, X, Mmat, Z, Delta, n_samples,
+        super(HSDM, self).__init__(Y, X, Mmat, Z, Delta, n_samples,
                 **options)

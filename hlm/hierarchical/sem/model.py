@@ -11,10 +11,9 @@ from warnings import warn as Warn
 from pysal.spreg.utils import spdot
 from .sample import sample
 
-from ...abstracts import Sampler_Mixin
+from ...abstracts import Sampler_Mixin, Hashmap, Trace
 from ... import verify
 from ...utils import speigen_range 
-from ...trace import Trace as Trace
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
@@ -29,14 +28,13 @@ class Base_HSEM(Sampler_Mixin):
         
         N, p = X.shape
         J = M.shape[0]
-        self.state = Trace(**{'X':X, 'y':y, 'M':M, 'Delta':Delta,
+        self.state = Hashmap(**{'X':X, 'y':y, 'M':M, 'Delta':Delta,
                            'N':N, 'J':J, 'p':p})
-        self.trace = Trace()
         self.traced_params = SAMPLERS
         extras = _configs.pop('extra_tracked_params', None)
         if extras is not None:
             self.traced_params.extend(extra_tracked_params)
-        self.trace.update({k:[] for k in self.traced_params})
+        self.trace = Trace(**{k:[] for k in self.traced_params})
         leftovers = self._setup_data(**_configs)
         self._setup_configs(**leftovers)
         self._setup_truncation()
@@ -73,20 +71,20 @@ class Base_HSEM(Sampler_Mixin):
                  #multi-parameter options
                  tuning=0, 
                  #spatial parameter metropolis configurations:
-                 rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
-                 rho_proposal=stats.norm, rho_adapt_step=1.01,
+                 lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6, 
+                 lambda_proposal=stats.norm, lambda_adapt_step=1.01,
                  **kw):
         """
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
         """
-        self.configs = Trace()
-        self.configs.Lambda = Trace()
-        self.configs.Lambda.jump = rho_jump
-        self.configs.Lambda.ar_low = rho_ar_low
-        self.configs.Lambda.ar_hi = rho_ar_hi
-        self.configs.Lambda.proposal = rho_proposal
-        self.configs.Lambda.adapt_step = rho_adapt_step
+        self.configs = Hashmap()
+        self.configs.Lambda = Hashmap()
+        self.configs.Lambda.jump = lambda_jump
+        self.configs.Lambda.ar_low = lambda_ar_low
+        self.configs.Lambda.ar_hi = lambda_ar_hi
+        self.configs.Lambda.proposal = lambda_proposal
+        self.configs.Lambda.adapt_step = lambda_adapt_step
         self.configs.Lambda.rejected = 0
         self.configs.Lambda.accepted = 0
         self.configs.Lambda.max_adapt = tuning

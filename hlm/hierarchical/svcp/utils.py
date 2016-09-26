@@ -11,16 +11,10 @@ def explode(X):
         X[i, i*p:i*p+p] = row
     return X
 
-def nexp_weights(phi, pwds):
+def nexp(phi, pwds):
     """
     use the nexgative exponential distance weighting function on a matrix of
     pairwise distances to generate a spatial-dependence matrix for a svcp 
     """
     H = np.exp(- pwds / phi)
-    return H
-
-class Namespace(object):
-    """
-    convenience class to use dot notation to access variables
-    """
-    pass
+    return H 
