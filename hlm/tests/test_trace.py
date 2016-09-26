@@ -1,6 +1,7 @@
 import numpy as np
-from .trace import NewTrace
-from .abstracts import Hashmap
+import pandas as pd
+from hlm.trace import NewTrace
+from hlm.abstracts import Hashmap
 import unittest as ut
 
 class Test_Trace(ut.TestCase):
@@ -29,7 +30,7 @@ class Test_Trace(ut.TestCase):
         assert mt[-1] == [{k:9 for k in ['a','b', 'c', 'd', 'e']}]*3
 
         assert t[2:5] == {k:list(range(2,5)) for k in  ['a','b', 'c', 'd', 'e']}
-        assert mt[8:] == [ {k:list(range(8,10)) for k in  ['a','b', 'c', 'd', 'e'] }] * 3 
+        assert mt[8:] == [ {k:list(range(8,10)) for k in  ['a','b', 'c', 'd', 'e'] }] * 3
         assert t[-4::2] ==  {k:[6,8] for k in  ['a','b', 'c', 'd', 'e']}
 
         assert t['a'] == list(range(10))
@@ -37,7 +38,7 @@ class Test_Trace(ut.TestCase):
         assert t[['a','b']] == {'a':list(range(10)), 'b':list(range(10))}
         assert mt[['a','b']] == [{'a':list(range(10)), 'b':list(range(10))}]*3
 
-        #2index 
+        #2index
         assert t['a', 1] == 1
         assert t[['a', 'b'], 1] == {'a':1, 'b':1}
         assert mt['e', 5] == [5]*3
@@ -73,3 +74,30 @@ class Test_Trace(ut.TestCase):
         assert mt[2, :, :] == {k:list(range(10)) for k in ['a','b','c','d','e']}
         assert mt[:,:,:] == mt.chains
         assert mt[:,:,:] is not mt.chains
+    
+    def test_to_df(self):
+        df = self.t.to_df()
+        df2 = pd.DataFrame.from_dict(self.t.chains[0])
+        np.testing.assert_array_equal(df.values, df2.values)
+        mtdf = self.mt.to_df()
+        mtdf2 = [pd.DataFrame.from_dict(chain) for chain in self.mt.chains]
+        for i in range(len(mtdf2)):
+            np.testing.assert_array_equal(mtdf[i].values, mtdf2[i].values)
+   
+    def test_from_df(self):
+        df = self.t.to_df()
+        new_trace = NewTrace.from_df(df)
+        assert new_trace == self.t
+        new_mt = NewTrace.from_df(df, df, df)
+        assert new_mt == self.t
+
+    def test_plot(self):
+        try:
+            self.t.plot()
+        except:
+            raise Exception('Single trace plotting failed!')
+
+        try:
+            self.mt.plot()
+        except:
+            raise Exception('Multi-chain trace plotting failed!')

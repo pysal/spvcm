@@ -23,7 +23,7 @@ def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
     grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
     return grid
 
-def south():
+def south(df=False):
     """
     Sets up the data for the US southern counties example.
     
@@ -57,9 +57,11 @@ def south():
     
     membership = data.STATE_NAME.apply(lambda x: W2.id_order.index(x)).values
     
-    d = {'X':X, 'Y':Y, 'Z':Z, 'W1':W1, 'W2':W2,
-         'N':N, 'J':J, 'data':data, 'membership':membership}
-    return d
+    d = {'X':X, 'Y':Y, 'Z':Z, 'W':W1, 'M':W2, 'membership':membership}
+    if df:
+        return d, data
+    else:
+        return d
 
 ####################
 # MATRIX UTILITIES #
@@ -126,8 +128,8 @@ def speigen_range(matrix, retry=True, coerce=True):
                 raise e
         emin = spla.eigs(matrix, k=1, which='SR')[0]
         if coerce:
-            emax = emax.astype(float)
-            emin = emin.astype(float)
+            emax = emax.real.astype(float)
+            emin = emin.real.astype(float)
     else:
         try:
             eigs = nla.eigvals(matrix)

@@ -1,20 +1,16 @@
 from __future__ import division
 
-import types
 import numpy as np
 import scipy.stats as stats
-import scipy.sparse as spar
 import copy
 
 from numpy import linalg as la
 from warnings import warn as Warn
 from pysal.spreg.utils import sphstack, spdot
 from .sample import sample
-from ...abstracts import Sampler_Mixin
+from ...abstracts import Sampler_Mixin, Hashmap, Trace
 from ... import verify
 from ...utils import speigen_range, splogdet, ind_covariance
-from ...trace import Trace
-
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda', 'Rho']
 
@@ -22,45 +18,47 @@ class Base_Generic(Sampler_Mixin):
     """
     The class that actually ends up setting up the Generic model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the
-    sample function n_samples times to the state. 
+    sample function n_samples times to the state.
     """
-    def __init__(self, y, X, W, M, Delta, n_samples=1000, **_configs):
+    def __init__(self, Y, X, W, M, Delta, n_samples=1000, **_configs):
         
         skip_covariance = _configs.pop('skip_covariance', False)
         
         N, p = X.shape
         _N, J = Delta.shape
-        self.state = Trace(**{'X':X, 'y':y, 'M':M, 'W':W, 'Delta':Delta,
+        n_jobs = _configs.pop('n_jobs', 1)
+        self.state = Hashmap(**{'X':X, 'Y':Y, 'M':M, 'W':W, 'Delta':Delta,
                            'N':N, 'J':J, 'p':p })
-        self.trace = Trace()
         self.traced_params = copy.deepcopy(SAMPLERS)
         extras = _configs.pop('extra_traced_params', None)
         if extras is not None:
             self.traced_params.extend(extras)
-        self.trace.update({k:[] for k in self.traced_params})
+        hashmaps = [{k:[] for k in self.traced_params}]*n_jobs
+        self.trace = Trace(*hashmaps)
         leftovers = self._setup_data(**_configs)
         self._setup_configs(**leftovers)
         self._setup_truncation()
         self._setup_initial_values()
 
-        if not skip_covariance: 
-            self.state.Psi_1 = ind_covariance 
+        if not skip_covariance:
+            self.state.Psi_1 = ind_covariance
             self.state.Psi_2 = ind_covariance
             self._setup_covariance()
 
         
         self.cycles = 0
-
-        try:
-            self.sample(n_samples)
-        except (np.linalg.LinAlgError, ValueError) as e:
-            Warn('Encountered the following LinAlgError. '
-                 'Model will return for debugging. \n {}'.format(e))
+        
+        if n_samples > 0:
+            try:
+                self.sample(n_samples, n_jobs=n_jobs)
+            except (np.linalg.LinAlgError, ValueError) as e:
+                Warn('Encountered the following LinAlgError. '
+                     'Model will return for debugging. \n {}'.format(e))
 
     def _setup_data(self, **hypers):
         """
-        This sets up the data and hyperparameters of the problem. 
-        If the hyperparameters are to be adjusted, pass them as keyword arguments. 
+        This sets up the data and hyperparameters of the problem.
+        If the hyperparameters are to be adjusted, pass them as keyword arguments.
 
         Arguments
         ----------
@@ -84,13 +82,12 @@ class Base_Generic(Sampler_Mixin):
         
         innovations = {k:v for k,v in dict(locals()).items() if k not in ['hypers', 'self']}
         self.state.update(innovations)
-
         return hypers
     
     def _finalize_invariants(self):
         """
-        This computes derived properties of hyperparameters that do not change 
-        over iterations. This is called one time before sampling. 
+        This computes derived properties of hyperparameters that do not change
+        over iterations. This is called one time before sampling.
         """
         st = self.state
         st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
@@ -110,50 +107,39 @@ class Base_Generic(Sampler_Mixin):
                 return Rho_logprior
             st.LogRho0 = LogRho0
 
-    def _setup_configs(self, #would like to make these keyword only using * 
+    def _setup_configs(self, #would like to make these keyword only using *
                  #multi-parameter options
-                 tuning=0, 
+                 tuning=0,
                  #spatial parameter grid sample configurations:
-                 rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
+                 rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6,
                  rho_proposal=stats.norm, rho_adapt_step=1.01,
                  #spatial parameter grid sample configurations:
-                 lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6, 
+                 lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6,
                  lambda_proposal=stats.norm, lambda_adapt_step=1.01):
         """
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
         """
-        self.configs = Trace()
-        self.configs.Rho = Trace()
-        self.configs.Rho.jump = rho_jump
-        self.configs.Rho.ar_low = rho_ar_low
-        self.configs.Rho.ar_hi = rho_ar_hi
-        self.configs.Rho.proposal = rho_proposal
-        self.configs.Rho.adapt_step = rho_adapt_step
-        self.configs.Rho.rejected = 0
-        self.configs.Rho.accepted = 0
-        self.configs.Rho.max_adapt = tuning 
-        if tuning > 0:
-            self.configs.Rho.adapt = True
-        else:
-            self.configs.Rho.adapt = False
-        self.configs.Lambda = Trace()
-        self.configs.Lambda.jump = lambda_jump
-        self.configs.Lambda.ar_low = lambda_ar_low
-        self.configs.Lambda.ar_hi = lambda_ar_hi
-        self.configs.Lambda.proposal = lambda_proposal
-        self.configs.Lambda.adapt_step = lambda_adapt_step
-        self.configs.Lambda.rejected = 0
-        self.configs.Lambda.accepted = 0
-        self.configs.Lambda.max_adapt = tuning 
-        if tuning > 0:
-            self.configs.Lambda.adapt = True
-        else:
-            self.configs.Lambda.adapt = False
+        self.configs = Hashmap()
+        self.configs.Rho = Hashmap(jump = rho_jump, ar_low = rho_ar_low,
+                                   ar_hi = rho_ar_hi,
+                                   proposal = rho_proposal,
+                                   adapt_step = rho_adapt_step,
+                                   accepted = 0, rejected = 0,
+                                   max_adapt = tuning,
+                                   adapt = tuning > 0)
+        self.configs.Lambda = Hashmap(jump = lambda_jump,
+                                      ar_low = lambda_ar_low,
+                                      ar_hi = lambda_ar_hi,
+                                      proposal = lambda_proposal,
+                                      adapt_step = lambda_adapt_step,
+                                      accepted = 0, rejected = 0,
+                                      max_adapt = tuning,
+                                      adapt = tuning > 0)
 
     def _setup_truncation(self):
         """
-        This computes truncations for the spatial parameters. 
+        This computes truncations for the spatial parameters.
     
         If configs.truncate is set to 'eigs', computes the eigenrange of the two
         spatial weights matrices using speigen_range
@@ -207,15 +193,15 @@ class Base_Generic(Sampler_Mixin):
     
     _sample = sample
 
-class Generic(Base_Generic): 
+class Generic(Base_Generic):
     """
     The class that intercepts & validates input
     """
-    def __init__(self, y, X, M, W, Z=None, Delta=None, membership=None, 
+    def __init__(self, Y, X, W, M, Z=None, Delta=None, membership=None,
                  #data options
                  transform ='r', n_samples=1000, verbose=False,
                  **options):
-        M,W = verify.weights(M, W, transform=transform)
+        W,M = verify.weights(W,M, transform=transform)
         self.M = M
 
         N,_ = X.shape
@@ -231,5 +217,5 @@ class Generic(Base_Generic):
         if Z is not None:
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(Generic, self).__init__(y, X, Wmat, Mmat, Delta, n_samples,
+        super(Generic, self).__init__(Y, X, Wmat, Mmat, Delta, n_samples,
                 **options)

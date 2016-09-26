@@ -5,7 +5,7 @@ import numpy as np
 
 class Base_SMASMA(Base_Generic):
     def __init__(self, Y, X, W, M, Delta, n_samples=1000, **configs):
-        super(Base_SMASMA, self).__init__(Y, X, W, M, Delta, n_samples=0, 
+        super(Base_SMASMA, self).__init__(Y, X, W, M, Delta, n_samples=0,
                                         skip_covariance=True, **configs)
         st = self.state
         self.state.Psi_1 = sma_covariance
@@ -20,11 +20,11 @@ class Base_SMASMA(Base_Generic):
                  'Model will return for debugging purposes. \n {}'.format(e))
 
 class SMASMA(Base_SMASMA):
-    def __init__(self, y, X, M, W, Z=None, Delta=None, membership=None, 
+    def __init__(self, Y, X, W, M, Z=None, Delta=None, membership=None,
                  #data options
                  transform ='r', n_samples=1000, verbose=False,
                  **options):
-        M,W = verify.weights(M, W, transform=transform)
+        W,M = verify.weights(W,M, transform=transform)
         self.M = M
 
         N,_ = X.shape
@@ -40,5 +40,5 @@ class SMASMA(Base_SMASMA):
         if Z is not None:
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(SMASMA, self).__init__(y, X, Wmat, Mmat, Delta, n_samples,
+        super(SMASMA, self).__init__(Y, X, Wmat, Mmat, Delta, n_samples,
                                            **options)

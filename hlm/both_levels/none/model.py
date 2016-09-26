@@ -10,10 +10,9 @@ from numpy import linalg as la
 from warnings import warn as Warn
 from pysal.spreg.utils import sphstack, spdot
 from .sample import sample
-from ...abstracts import Sampler_Mixin
+from ...abstracts import Sampler_Mixin, Hashmap, Trace
 from ... import verify
-from ...utils import speigen_range, splogdet
-from ...trace import Trace
+from ...utils import speigen_range, splogdet, ind_covariance
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2']
@@ -22,20 +21,21 @@ class Base_MVCM(Sampler_Mixin):
     """
     The class that actually ends up setting up the MVCM model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the
-    sample function n_samples times to the state. 
+    sample function n_samples times to the state.
     """
-    def __init__(self, y, X, Delta, n_samples=1000, **_configs):
+    def __init__(self, Y, X, Delta, n_samples=1000, **_configs):
         
         N, p = X.shape
         _N, J = Delta.shape
-        self.state = Trace(**{'X':X, 'y':y, 'Delta':Delta,
+        n_jobs = _configs.pop('n_jobs', 1)
+        self.state = Hashmap(**{'X':X, 'Y':Y, 'Delta':Delta,
                            'N':N, 'J':J, 'p':p })
-        self.trace = Trace()
         self.traced_params = SAMPLERS
         extras = _configs.pop('extra_tracked_params', None)
         if extras is not None:
             self.traced_params.extend(extra_tracked_params)
-        self.trace.update({k:[] for k in self.traced_params})
+        hashmaps = [Hashmap(**{k:[] for k in self.traced_params})]*n_jobs
+        self.trace = Trace(*hashmaps)
         leftovers = self._setup_data(**_configs)
         self._setup_configs(**leftovers)
         self._setup_initial_values()
@@ -73,8 +73,8 @@ class Base_MVCM(Sampler_Mixin):
     
     def _finalize_invariants(self):
         """
-        This computes derived properties of hyperparameters that do not change 
-        over iterations. This is called one time before sampling. 
+        This computes derived properties of hyperparameters that do not change
+        over iterations. This is called one time before sampling.
         """
         st = self.state
         st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
@@ -82,22 +82,22 @@ class Base_MVCM(Sampler_Mixin):
         st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
         st.Tau2_an = self.state.J / 2 + st.Tau2_a0
 
-    def _setup_configs(self, #would like to make these keyword only using * 
+    def _setup_configs(self, #would like to make these keyword only using *
                  #multi-parameter options
-                 truncate='eigs', tuning=0, 
+                 truncate='eigs', tuning=0,
                  #spatial parameter grid sample configurations:
-                 rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6, 
+                 rho_jump=.5, rho_ar_low=.4, rho_ar_hi=.6,
                  rho_proposal=stats.norm, rho_adapt_step=1.01,
                  #spatial parameter grid sample configurations:
-                 lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6, 
+                 lambda_jump=.5, lambda_ar_low=.4, lambda_ar_hi=.6,
                  lambda_proposal=stats.norm, lambda_adapt_step=1.01,
                  **kw):
         """
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
         """
-        self.configs = Trace()
-        self.configs.Rho = Trace()
+        self.configs = Hashmap()
+        self.configs.Rho = Hashmap()
         self.configs.Rho.jump = rho_jump
         self.configs.Rho.ar_low = rho_ar_low
         self.configs.Rho.ar_hi = rho_ar_hi
@@ -105,12 +105,12 @@ class Base_MVCM(Sampler_Mixin):
         self.configs.Rho.adapt_step = rho_adapt_step
         self.configs.Rho.rejected = 0
         self.configs.Rho.accepted = 0
-        self.configs.Rho.max_adapt = tuning 
+        self.configs.Rho.max_adapt = tuning
         if tuning > 0:
             self.configs.Rho.adapt = True
         else:
             self.configs.Rho.adapt = False
-        self.configs.Lambda = Trace()
+        self.configs.Lambda = Hashmap()
         self.configs.Lambda.jump = lambda_jump
         self.configs.Lambda.ar_low = lambda_ar_low
         self.configs.Lambda.ar_hi = lambda_ar_hi
@@ -118,7 +118,7 @@ class Base_MVCM(Sampler_Mixin):
         self.configs.Lambda.adapt_step = lambda_adapt_step
         self.configs.Lambda.rejected = 0
         self.configs.Lambda.accepted = 0
-        self.configs.Lambda.max_adapt = tuning 
+        self.configs.Lambda.max_adapt = tuning
         if tuning > 0:
             self.configs.Lambda.adapt = True
         else:
@@ -145,8 +145,8 @@ class Base_MVCM(Sampler_Mixin):
         utils.ser_covariance function will be used.
         """
         st = self.state
-        st.Psi_1 = lambda par, Wobj: np.eye(Wobj.shape[0])
-        st.Psi_2 = lambda par, Wobj: np.eye(Wobj.shape[0])
+        st.Psi_1 = ind_covariance
+        st.Psi_2 = ind_covariance
         
         st.PsiRho = st.In
         st.PsiLambda = st.Ij
@@ -161,11 +161,11 @@ class Base_MVCM(Sampler_Mixin):
     
     _sample = sample
 
-class MVCM(Base_MVCM): 
+class MVCM(Base_MVCM):
     """
     The class that intercepts & validates input
     """
-    def __init__(self, y, X, Z=None, Delta=None, membership=None, 
+    def __init__(self, Y, X, Z=None, Delta=None, membership=None,
                  #data options
                  sparse = True, transform ='r', n_samples=1000, verbose=False,
                  **options):
@@ -175,8 +175,11 @@ class MVCM(Base_MVCM):
             _,J = Delta.shape
         elif membership is not None:
             J = len(np.unique(membership))
-
+        else:
+            raise UserWarning("No Delta matrix nor membership classification provided. Refusing to arbitrarily assign units to upper-level regions.")
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
+
+
 
         X = verify.covariates(X)
 
@@ -184,5 +187,5 @@ class MVCM(Base_MVCM):
         if Z is not None:
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(MVCM, self).__init__(y, X, Delta, n_samples,
+        super(MVCM, self).__init__(Y, X, Delta, n_samples,
                 **options)

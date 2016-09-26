@@ -5,7 +5,7 @@ import numpy as np
 
 class Base_SESMA(Base_Generic):
     def __init__(self, Y, X, W, M, Delta, n_samples=1000, **configs):
-        super(Base_SESMA, self).__init__(Y, X, W, M, Delta, n_samples=0, 
+        super(Base_SESMA, self).__init__(Y, X, W, M, Delta, n_samples=0,
                                         skip_covariance=True, **configs)
         st = self.state
         st.Psi_1 = se_covariance
@@ -20,11 +20,11 @@ class Base_SESMA(Base_Generic):
 
 
 class SESMA(Base_SESMA):
-    def __init__(self, y, X, M, W, Z=None, Delta=None, membership=None, 
+    def __init__(self, Y, X, W, M, Z=None, Delta=None, membership=None,
                  #data options
                  transform ='r', n_samples=1000, verbose=False,
                  **options):
-        M,W = verify.weights(M, W, transform=transform)
+        W,M = verify.weights(W,M, transform=transform)
         self.M = M
 
         N,_ = X.shape
@@ -40,5 +40,5 @@ class SESMA(Base_SESMA):
         if Z is not None:
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(SESMA, self).__init__(y, X, Wmat, Mmat, Delta, n_samples,
+        super(SESMA, self).__init__(Y, X, Wmat, Mmat, Delta, n_samples,
                                            **options)

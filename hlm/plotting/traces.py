@@ -1,11 +1,11 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-from .. import trace as trc
 
-def plot_trace(model, burn=0, varnames=None, trace=None, kde_kwargs={}, trace_kwargs={}):
+def plot_trace(model, burn=0, thin=None, varnames=None, trace=None, 
+               kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
     """
-    Make a trace plot paired with a distributional plot. 
+    Make a trace plot paired with a distributional plot.
 
     Arguments
     -----------
@@ -16,7 +16,7 @@ def plot_trace(model, burn=0, varnames=None, trace=None, kde_kwargs={}, trace_kw
     thin    :   int
                 the number of iterations to discard between iterations
     varnames :  str or list
-                name or list of names to plot. 
+                name or list of names to plot.
     kde_kwargs : dictionary
                  dictionary of aesthetic arguments for the kde plot
     trace_kwargs : dictionary
@@ -26,7 +26,7 @@ def plot_trace(model, burn=0, varnames=None, trace=None, kde_kwargs={}, trace_kw
     -------
     figure, axis tuple, where axis is (len(varnames), 2)
     """
-    if model is None: 
+    if model is None:
         if trace is None:
             raise Exception('Neither model nor trace provided.')
     else:
@@ -35,62 +35,64 @@ def plot_trace(model, burn=0, varnames=None, trace=None, kde_kwargs={}, trace_kw
         varnames = trace.varnames
     elif isinstance(varnames, str):
         varnames = [varnames]
-    fig, ax = plt.subplots(len(varnames), 2, figsize=(1.6*6, 12), sharey='row')
-    for i, parameter in enumerate(varnames):
-        this_param = np.asarray(trace[parameter])
-        if len(this_param.shape) == 3:
-            a, b, _ = this_param.shape
-            this_param = this_param.reshape(a,b)
-
-        if len(this_param.shape) == 2:
-            if this_param.shape[-1] == 1:
-                sns.kdeplot(this_param.flatten()[burn:], 
-                            shade=True, vertical=True, ax=ax[i,1],
-                            **kde_kwargs)
-            else:
-                for param in this_param.T:
-                    sns.kdeplot(param[burn:], shade=True, 
-                                vertical=True, ax=ax[i,1],
-                                **kde_kwargs)
-        else:
-            sns.kdeplot(this_param[burn:],
-                        shade=True, vertical=True, ax=ax[i,1],
-                        **kde_kwargs)
-        ax[i,0].plot(this_param[burn:], linewidth=.5, **trace_kwargs)
-        ax[i,1].set_title(parameter)
-    fig.tight_layout()
-    return fig, ax
-
-def plot_multitrace(mt, burn=0, varnames=None, kde_kwargs={}, trace_kwargs ={}):
-    traces = [mt[k] for k in mt.varnames if k.startswith('Chain_') 
-                                        and isinstance(mt[k], trc.Trace)]
-    if varnames is None:
-        varnames = traces[0].varnames
-    elif isinstance(varnames, str):
-        varnames = [varnames]
-    fig, ax = plt.subplots(len(varnames), 2, figsize=(1.6*6, 12), sharey='row')
-    for trace in traces:
-        for i, parameter in enumerate(varnames):
-            this_param = np.asarray(trace[parameter])
+    if figure_kwargs == dict():
+        figure_kwargs = {'figsize':(1.6*6, 12), 'sharey':'row'}
+    if kde_kwargs == dict():
+        kde_kwargs = {'shade':True, 'vertical':True}
+    if trace_kwargs == dict():
+        trace_kwargs = {'linewidth':.5, 'alpha':.80}
+    fig, ax = plt.subplots(len(varnames), 2, **figure_kwargs)
+    for chain_i, chain in enumerate(trace.chains):
+        for i, param_name in enumerate(varnames):
+            this_param = np.asarray(trace[chain_i,param_name,burn::thin])
             if len(this_param.shape) == 3:
-                a, b, _ = this_param.shape
-                this_param = this_param.reshape(a,b)
-
+                n,a,b = this_param.shape
+                this_param = this_param.reshape(n,a*b)
             if len(this_param.shape) == 2:
                 if this_param.shape[-1] == 1:
-                    sns.kdeplot(this_param.flatten()[burn:], 
-                                shade=True, vertical=True, ax=ax[i,1],
-                                **kde_kwargs)
+                    sns.kdeplot(this_param.flatten(),
+                                ax=ax[i,1], **kde_kwargs)
                 else:
                     for param in this_param.T:
-                        sns.kdeplot(param[burn:], shade=True, 
-                                    vertical=True, ax=ax[i,1],
-                                    **kde_kwargs)
+                        sns.kdeplot(param, ax=ax[i,1], **kde_kwargs)
             else:
-                sns.kdeplot(this_param[burn:],
-                            shade=True, vertical=True, ax=ax[i,1],
-                            **kde_kwargs)
-            ax[i,0].plot(this_param[burn:], linewidth=.5, **trace_kwargs)
-            ax[i,1].set_title(parameter)
+                sns.kdeplot(this_param, ax=ax[i,1], **kde_kwargs)
+            ax[i,0].plot(this_param, **trace_kwargs)
+            ax[i,1].set_title(param_name)
     fig.tight_layout()
     return fig, ax
+
+def corrplot(m, burn=0, thin=None,
+             percentiles=[25,50,75], support=np.linspace(.001,1,num=1000),
+             figure_kw=None, plot_kw=None, kde_kw=None):
+    if figure_kw is None:
+        figure_kw = {'figsize':(1.6*8,8), 'sharey':True}
+    
+    if plot_kw is None:
+        plot_kw = [dict()]*len(percentiles)
+    elif isinstance(plot_kw, dict):
+        plot_kw = [plot_kw]*len(percentiles)
+    elif isinstance(plot_kw, list):
+        assert len(plot_kw)==len(percentiles)
+    
+    if kde_kw is None:
+        kde_kw = [{'horizontal':True, 'shade':True}]*len(percentiles)
+    elif isinstance(kde_kw, dict):
+        kde_kw = [kde_kw]*len(percentiles)
+    elif isinstance(kde_kw, list):
+        assert len(kde_kw)==len(percentiles)
+    
+    corrfunc = m.state.correlation_function
+    pwds = m.state.pwds
+    if m.trace.n_chains > 1:
+        raise
+    phis = m.trace['Phi', burn::thin]
+    f,ax = plt.subplots(1,2, **figure_kw)
+    support = np.linspace(.001,1,num=1000)
+    ptiles = [[np.percentile(corrfunc(r, pwds).flatten(), ptile) 
+               for r in support] for ptile in percentiles]
+    for i, ptile in enumerate(ptiles):
+        ax[0].plot(support*m.state.max_dist, ptile, **plot_kw[i])
+        sns.kdeplot(ptile, ax=ax[1], **kde_kw[i])
+        ax[1].set_title(str(percentiles[i]))
+    return f,ax

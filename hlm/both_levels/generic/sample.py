@@ -10,16 +10,16 @@ def sample(Model):
     st = Model.state
 
     ### Sample the Beta conditional posterior
-    ### P(beta | . ) \propto L(Y|.) \dot P(\beta) 
+    ### P(beta | . ) \propto L(Y|.) \dot P(\beta)
     ### is
     ### N(Sb, S) where
     ### S = (X' Sigma^{-1}_Y X + S_0^{-1})^{-1}
     ### b = X' Sigma^{-1}_Y (Y - Delta Alphas) + S^{-1}\mu_0
     covm_update = st.X.T.dot(st.PsiRhoi).dot(st.X) / st.Sigma2
     covm_update += st.Betas_cov0i
-    covm_update = la.inv(covm_update) 
+    covm_update = la.inv(covm_update)
 
-    resids = st.y - st.Delta.dot(st.Alphas)
+    resids = st.Y - st.Delta.dot(st.Alphas)
     XtSresids = st.X.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
     mean_update = XtSresids + st.Betas_cov0i.dot(st.Betas_mean0)
     mean_update = np.dot(covm_update, mean_update)
@@ -38,7 +38,7 @@ def sample(Model):
     covm_update += st.PsiLambdai / st.Tau2
     covm_update = la.inv(covm_update)
 
-    resids = st.y - st.XBetas
+    resids = st.Y - st.XBetas
     mean_update = st.Delta.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
     mean_update = np.dot(covm_update, mean_update)
     st.Alphas = chol_mvn(mean_update, covm_update)
@@ -57,16 +57,16 @@ def sample(Model):
     ### is
     ### IG(N/2 + a0, eta'Psi(\rho)^{-1}eta * .5 + b0)
     ### Where eta is the linear predictor, Y - X\beta + \DeltaAlphas
-    eta = st.y - st.XBetas - st.DeltaAlphas
+    eta = st.Y - st.XBetas - st.DeltaAlphas
     bn = eta.T.dot(st.PsiRhoi).dot(eta) * .5 + st.Sigma2_b0
     st.Sigma2 = stats.invgamma.rvs(st.Sigma2_an, scale=bn)
 
     ### Sample the spatial components using metropolis-hastings
-    ### P(Psi(\lambda) | .) \propto L(Y | .) \dot P(\lambda) 
+    ### P(Psi(\lambda) | .) \propto L(Y | .) \dot P(\lambda)
     ### is
     ### |Psi(lambda)|^{-1/2} exp(1/2(Alphas'Psi(lambda)^{-1}Alphas * Tau2^{-1}))
     ###  * 1/(emax-emin)
-    st.Rho = sample_spatial(Model.configs.Rho, st.Rho, st, 
+    st.Rho = sample_spatial(Model.configs.Rho, st.Rho, st,
                             logp=logp_rho)
     
     st.PsiRho = st.Psi_1(st.Rho, st.W)
@@ -74,10 +74,10 @@ def sample(Model):
     st.PsiSigma2i = la.inv(st.PsiSigma2)
     st.PsiRhoi = la.inv(st.PsiRho)
         
-    ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho) 
-    ### is 
+    ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho)
+    ### is
     ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
-    st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st, 
+    st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st,
                                logp=logp_lambda)
     st.PsiLambda = st.Psi_2(st.Lambda, st.M)
     st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
@@ -96,7 +96,7 @@ def sample_spatial(confs, value, state, logp):
     Parameters
     ----------
     confs   :   Namespace
-                a namespace containing the configuration options for the 
+                a namespace containing the configuration options for the
                 parameter being sampled
     value   :   float or int
                 the current value of the parameter
@@ -107,10 +107,10 @@ def sample_spatial(confs, value, state, logp):
     Returns
     -------
     a new value of the spatial parameter, drawn according to the information in
-    confs. 
+    confs.
     """
-    new_val, accepted = metropolis(state, value, confs.proposal, 
-                                   logp, confs)
+    new_val, accepted = metropolis(state, value, confs.proposal,
+                                   logp, confs.jump)
     # increment relevant parameters
     if accepted:
         confs.accepted += 1
@@ -131,7 +131,7 @@ def sample_spatial(confs, value, state, logp):
 def logp_rho(state, val):
     """
     The logp for lower-level spatial parameters in this case has the same
-    form as a multivariate normal distribution, sampled over the variance matrix, rather than over y. 
+    form as a multivariate normal distribution, sampled over the variance matrix, rather than over y.
     """
     st = state
     
@@ -143,7 +143,7 @@ def logp_rho(state, val):
     PsiRhoi = la.inv(PsiRho)
     logdet = splogdet(PsiRho)
     
-    eta = st.y - st.XBetas - st.DeltaAlphas
+    eta = st.Y - st.XBetas - st.DeltaAlphas
     kernel = eta.T.dot(PsiRhoi).dot(eta) / st.Sigma2
 
     return -.5*logdet -.5 * kernel + st.LogRho0(val)

@@ -1,24 +1,31 @@
 import numpy as np
-from pysal.spreg.utils import sphstack 
+from pysal.spreg.utils import sphstack
 from pysal.spreg.diagnostics import constant_check
 from warnings import warn as Warn
 
-def weights(*Weights, transform):
+def weights(W,M, transform):
     """
     This tries to transform a pysal spatial weights object into being
-    row-standardized. It warns if the objects do not support transformation. 
+    row-standardized. It warns if the objects do not support transformation.
 
     """
     try:
-        for i, _ in enumerate(Weights):
-            Weights[i].transform = transform
+        if M is not None:
+            M.transform = 'r'
+        if W is not None:
+            W.transform = 'r'
     except AttributeError:
         Warn("Weights objects do not support transformation. Proceeding without transforming weights.", UserWarning)
-    return Weights
+    try:
+        if M is not None and W is not None:
+            assert M.n <= W.n
+    except AssertionError:
+        raise AssertionError('M (n={}) is larger than W (n={}).'.format(M.n, W.n))
+    return W,M
 
 def covariates(X):
     """
-    This 
+    This
 
     1. checks if the lower-level covariate contains a constant
     2. adds a constant to the lower-level covariate if it has no constant
@@ -33,12 +40,12 @@ def covariates(X):
 
 def Delta_members(Delta, membership, N, J):
     """
-    This computes and verifies a Delta or membership vector. 
+    This computes and verifies a Delta or membership vector.
     """
     if Delta is None and membership is None:
         raise UserWarning("No Delta matrix nor membership classification provided. Refusing to arbitrarily assign units to upper-level regions.")
     elif membership is None:
-        membership = np.zeros((J,1))
+        membership = np.zeros((N,1))
         for idx, region in enumerate(Delta.T):
             membership[region.flatten() == 1] = idx
     elif Delta is None:

@@ -10,4 +10,4 @@ _all.extend([v for v in lower.__dict__.values() if isinstance(v, type)])
 _all.extend([v for v in hier.__dict__.values() if isinstance(v, type)])
 
 del (both_levels, upper_level, lower_level, hierarchical, 
-     trace, plotting, utils, verify, steps, abstracts)
+     plotting, utils, verify, steps, abstracts)

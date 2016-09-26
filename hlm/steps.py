@@ -25,35 +25,33 @@ def inversion(pdvec, grid):
         if topidx >= 0:
             return grid[topidx]
 
-def metropolis(state, current, proposal, logp, configs):
+def metropolis(state, current, proposal, logp, jump):
     """
     Sample using metropolis hastings in its simplest form
 
     Parameters
     ----------
-    state   :   Namespace
+    state   :   Hashmap
                 state required to evaluate the logp of the parameter
     current :   float/int
                 current value of the parameter
     proposal:   scipy random distribution
-                distribution that can has both `logpdf` and `rvs` methods
+                distribution that has both `logpdf` and `rvs` methods
     logp    :   callable(state, value)
                 function that can compute the current log of the probability
                 distribution of the value provided conditional on the state
-    configs :   Namespace
-                must contain `jump` attribute, which is the scale parameter for
-                the proposal.
-
+    jump    :   int
+                the scaling factor for the proposal distribution
     Returns
     --------
     new (or current) parameter value, and boolean indicating whether or not a
     new proposal was accepted.
     """
     current_logp = logp(state, current)
-    new_val = proposal.rvs(loc=current, scale=configs.jump)
+    new_val = proposal.rvs(loc=current, scale=jump)
     new_logp = logp(state, new_val)
-    forwards = proposal.logpdf(new_val, loc=current, scale=configs.jump)
-    backward = proposal.logpdf(current, loc=new_val, scale=configs.jump)
+    forwards = proposal.logpdf(new_val, loc=current, scale=jump)
+    backward = proposal.logpdf(current, loc=new_val, scale=jump)
     
     hastings_factor = backward - forwards
     r = new_logp - current_logp + hastings_factor
