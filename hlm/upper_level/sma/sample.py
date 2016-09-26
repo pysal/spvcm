@@ -20,7 +20,7 @@ def sample(Model):
     covm_update += st.Betas_cov0i
     covm_update = la.inv(covm_update) 
 
-    resids = st.y - st.Delta.dot(st.Alphas)
+    resids = st.Y - st.Delta.dot(st.Alphas)
     XtSresids = st.X.T.dot(resids) / st.Sigma2
     mean_update = XtSresids + st.Betas_cov0i.dot(st.Betas_mean0)
     mean_update = np.dot(covm_update, mean_update)
@@ -39,7 +39,7 @@ def sample(Model):
     covm_update += st.PsiTau2i
     covm_update = la.inv(covm_update)
 
-    resids = st.y - st.XBetas
+    resids = st.Y - st.XBetas
     mean_update = st.Delta.T.dot(resids) / st.Sigma2
     mean_update = np.dot(covm_update, mean_update)
     st.Alphas = chol_mvn(mean_update, covm_update)
@@ -58,7 +58,7 @@ def sample(Model):
     ### is
     ### IG(N/2 + a0, eta'Psi(\rho)^{-1}eta * .5 + b0)
     ### Where eta is the linear predictor, Y - X\beta + \DeltaAlphas
-    eta = st.y - st.XBetas - st.DeltaAlphas
+    eta = st.Y - st.XBetas - st.DeltaAlphas
     bn = eta.T.dot(eta) * .5 + st.Sigma2_b0
     st.Sigma2 = stats.invgamma.rvs(st.Sigma2_an, scale=bn)
         
