@@ -1,5 +1,6 @@
 from hlm.hierarchical.svcp import SVCP
 from hlm._constants import TEST_SEED
+from hlm.utils import baltim
 import pysal as ps
 import numpy as np
 import os
@@ -7,14 +8,10 @@ import os
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
 def _make_data():
-    baltim = ps.pdio.read_files(ps.examples.get_path('baltim.shp'))
-    coords = baltim[['X', 'Y']].values
-    Y = np.log(baltim.PRICE.values).reshape(-1,1)
-    Yz = Y - Y.mean()
-    X = baltim[['AGE', 'LOTSZ', 'SQFT']].values
-    Xz = X-X.mean(axis=0)
-    
-    model = SVCP(Yz, Xz, coordinates=coords, n_samples=0, phi_jump=.5)
+    inputs = baltim() 
+    inputs['n_samples'] = 0
+    inputs['phi_jump'] = .5
+    model = SVCP(**inputs)
     np.random.seed(TEST_SEED)
     model.draw()
     model.trace.to_df().to_csv(FULL_PATH + '/data/svcp.csv')

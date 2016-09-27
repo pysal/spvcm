@@ -6,8 +6,9 @@ import scipy.sparse as spar
 from scipy import stats 
 from scipy.spatial import distance as d
 from .utils import explode, nexp
-from .sample import sample
+from .sample import sample_phi
 from ...abstracts import Sampler_Mixin, Trace, Hashmap
+from ...utils import chol_mvn
 
 class SVCP(Sampler_Mixin):
     """
@@ -92,21 +93,11 @@ class SVCP(Sampler_Mixin):
         self._setup_initials(Phi, T, Mus, Betas)
         self._compute_invariants()
         self.configs = Hashmap() 
-        self.configs.Phi = Hashmap()
-        self.configs.Phi.proposal = phi_proposal
-        self.configs.Phi.accepted = 0
-        self.configs.Phi.rejected = 0
-        self.configs.Phi.adapt_step = phi_adapt_step
-        self.configs.Phi.jump = phi_jump
-        self.configs.Phi.ar_low = phi_ar_low
-        self.configs.Phi.ar_hi = phi_ar_hi
-        if tuning > 0:
-            self.configs.tuning = True
-            self.configs.Phi.max_tuning = tuning
-        else:
-            self.configs.tuning = False
-            self.configs.Phi.max_tuning = 0
-
+        self.configs.Phi = Hashmap(proposal=phi_proposal, accepted=0, rejected=0,
+                                   adapt_step = phi_adapt_step, jump=phi_jump,
+                                   ar_low = phi_ar_low, ar_hi = phi_ar_hi,
+                                   max_tuning = tuning)
+        self.configs.tuning = tuning > 0
         
         self._verbose = verbose
         self.cycles = 0
@@ -173,4 +164,65 @@ class SVCP(Sampler_Mixin):
         st.mu_cov0_inv = scla.inv(st.mu_cov0)
         st.mu_kernel_prior = np.dot(st.mu_cov0_inv, st.mu0)
     
-    _sample = sample
+
+    def _iteration(self):
+        """
+        Conduct one iteration of a Gibbs sampler for the self using the state
+        provided. 
+        """
+        st = self.state
+        
+        ## Tau, EQ 3 in appendix of Wheeler & Calder
+        ## Inverse Gamma w/ update to scale, no change to dof
+        y_Xbeta = st.Y - st.X.dot(st.Betas)
+        scale = st.b0 + .5 * y_Xbeta.T.dot(y_Xbeta)
+        st.Tau2 = stats.invgamma.rvs(st.Tau_dof, scale=scale)
+
+        ##covariance: T, EQ 4 in appendix of Wheeler & Calder
+        ## inverse wishart w/ update to covariance matrix, no change to dof
+        st.H = st.correlation_function(st.Phi, st.pwds)
+        st.Hinv = scla.inv(st.H)
+        st.tiled_Hinv = np.linalg.multi_dot([st.np2n, st.Hinv, st.np2n.T])
+        st.tiled_Mus = np.kron(st.iota_n, st.Mus.reshape(-1,1))
+        st.info = (st.Betas - st.tiled_Mus).dot((st.Betas - st.tiled_Mus).T)
+        st.kernel = np.multiply(st.tiled_Hinv, st.info) 
+        st.covm_update = np.linalg.multi_dot([st.np2p.T, st.kernel, st.np2p])
+        st.T = stats.invwishart.rvs(df=st.T_dof, scale=(st.covm_update + st.Omega0))
+
+        ##mean hierarchical effects: mu_\beta, in EQ 5 of Wheeler & Calder
+        ##normal with both a scale and a location update, priors don't change
+        #compute scale of mu_\betas
+        st.Sigma_beta = np.kron(st.H, st.T)
+        st.Psi = np.linalg.multi_dot((st.X, st.Sigma_beta, st.X.T)) + st.Tau2 * st.In
+        Psi_inv = scla.inv(st.Psi)
+        S_notinv_update = np.linalg.multi_dot((st.Xs.T, Psi_inv, st.Xs))
+        S = scla.inv(st.mu_cov0_inv + S_notinv_update)
+        
+        #compute location of mu_\betas
+        mkernel_update = np.linalg.multi_dot((st.Xs.T, Psi_inv, st.Y))  
+        st.Mu_means = np.dot(S, (mkernel_update + st.mu_kernel_prior))
+        
+        #draw them using cholesky decomposition: N(m, Sigma) = m + chol(Sigma).N(0,1)
+        st.Mus = chol_mvn(st.Mu_means, S) 
+        st.tiled_Mus = np.kron(st.iota_n, st.Mus)
+
+        ##effects \beta, in equation 6 of Wheeler & Calder
+        ##Normal with an update to both scale and location, priors don't change
+        
+        #compute scale of betas
+        st.Tinv = scla.inv(st.T)
+        st.kronHiTi = np.kron(st.Hinv, st.Tinv)
+        Ai = st.XtX / st.Tau2 + st.kronHiTi
+        A = scla.inv(Ai)
+        
+        #compute means of betas
+        C = st.Xty / st.Tau2 + np.dot(st.kronHiTi, st.tiled_Mus)
+        st.Beta_means = np.dot(A, C)
+        st.Beta_cov = A
+        
+        #draw them using cholesky decomposition
+        st.Betas = chol_mvn(st.Beta_means, st.Beta_cov)
+
+        # local nonstationarity parameter Phi, in equation 7 in Wheeler & Calder
+        # sample using metropolis
+        st.Phi = sample_phi(self)

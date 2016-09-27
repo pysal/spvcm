@@ -1,5 +1,6 @@
 import sys
 import types
+import os
 RTOL = 1e-5
 ATOL = 1e-5
 TEST_SEED = 310516
@@ -10,3 +11,5 @@ if PY2:
     CLASSTYPES = (classobj, type)
 else:
     CLASSTYPES = (type,)
+
+PACKAGE_PATH = os.path.dirname(os.path.abspath(__file__))

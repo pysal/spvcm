@@ -7,6 +7,7 @@ import multiprocessing as mp
 import sqlite3 as sql
 from .sqlite import head_to_sql, start_sql
 from .plotting.traces import plot_trace
+from collections import OrderedDict
 import pandas as pd
 import os
 
@@ -341,7 +342,12 @@ class Trace(object):
         else:
             raise IndexError('index not understood')
         
-        return np.squeeze(result)
+        result = np.asarray(result)
+        if result.shape == ():
+            result = result.tolist()
+        elif result.shape in [(1,1), (1,)]:
+            result = result[0]
+        return result
     
     def __eq__(self, other):
         if not isinstance(other, type(self)):
@@ -352,7 +358,7 @@ class Trace(object):
             
     def _allclose(self, other, **allclose_kw):
         try:
-            self._assert_allclose(self, other, **allclose_kw)
+            self._assert_allclose(other, **allclose_kw)
         except AssertionError:
             return False
         return True
@@ -378,11 +384,13 @@ class Trace(object):
         """
         dfs = []
         outnames = self.varnames
-        to_split = [name for name in outnames if len(self[name,0].shape)>1]
+        to_split = [name for name in outnames if np.asarray(self[0,name,0]).size > 1]
         for chain in self.chains:
-            out = copy.deepcopy(chain)
+            out = OrderedDict(list(chain.items()))
             for split in to_split:
-                records = np.squeeze(copy.deepcopy(chain[split]))
+                records = np.asarray(copy.deepcopy(chain[split]))
+                if len(records.shape) == 1:
+                    records = records.reshape(-1,1)
                 n,k = records.shape[0:2]
                 rest = records.shape[2:]
                 if len(rest) == 0:
@@ -392,12 +400,11 @@ class Trace(object):
                 else:
                     raise Exception("Parameter '{}' has too many dimensions"
                                     " to flatten able to be flattend?"               .format(split))
-                records = ({split+'_'+str(i):record.T.tolist()
-                            for i,record in enumerate(records.T)})
+                records = OrderedDict([(split+'_'+str(i),record.T.tolist())
+                                        for i,record in enumerate(records.T)])
                 out.update(records)
                 del out[split]
-            df = pd.DataFrame().from_dict({k:v
-                                           for k,v in out.items()})
+            df = pd.DataFrame().from_dict(out)
             dfs.append(df)
         if len(dfs) == 1:
             return dfs[0]
@@ -431,6 +438,8 @@ class Trace(object):
             traces = ([cls.from_df(df, varnames=varnames,
                         combine_suffix=combine_suffix) for df in dfs])
             return cls(*[trace.chains[0] for trace in traces])
+        elif isinstance(dfs[0], list):
+            return cls.from_df(*dfs, varnames=varnames, combine_suffix=combine_suffix)
         else:
             df = dfs[0]
         if varnames is None:
@@ -443,11 +452,15 @@ class Trace(object):
             else:
                 unique_stems.append('_'.join(suffix_split[:-1]))
         out = dict()
-        for stem in set(unique_stems):
+        for stem in unique_stems:
             cols = [var for var in df.columns if var.startswith(stem)]
             if len(cols) == 1:
                 targets = df[cols].values.flatten().tolist()
             else:
+                # ensure the tail ordinate sorts the columns, not string order
+                # '1','11','2' will corrupt the trace
+                order = [int(st.split(combine_suffix)[-1]) for st in cols]
+                cols = np.asarray(cols)[np.argsort(order)]
                 targets = [vec for vec in df[cols].values]
             out.update({stem:targets})
         return cls(**out)
@@ -473,11 +486,16 @@ class Trace(object):
             filestem = os.path.basename(filename)
             targets = [f for f in os.listdir(filepath)
                          if f.startswith(filestem)]
+            ordinates = [int(os.path.splitext(fname)[0].split(combine_suffix)[-1])
+                         for fname in targets]
+            # preserve the order of the trailing ordinates
+            targets = np.asarray(targets)[np.argsort(ordinates)].tolist()
             traces = ([cls.from_csv(filename=os.path.join(filepath, f)
                                     ,multi=False) for f in targets])
             if traces == []:
                 raise FileNotFoundError("No such file or directory: " +
                                         filepath + filestem)
+
             return cls(*[trace.chains[0] for trace in traces])
         else:
             df = pd.read_csv(filename, **pandas_kwargs)

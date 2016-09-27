@@ -5,6 +5,8 @@ import unittest as ut
 from hlm._constants import RTOL, ATOL
 import os
 
+FULL_PATH = os.path.dirname(os.path.abspath(__file__))
+
 class Test_Trace(ut.TestCase):
     def setUp(self):
 
@@ -12,6 +14,9 @@ class Test_Trace(ut.TestCase):
         
         self.t = Trace(**self.a)
         self.mt = Trace(self.a,self.a,self.a)
+        self.real_mt = Trace.from_csv(FULL_PATH + '/data/south_mvcm_5000', multi=True)
+        self.real_singles = [Trace.from_csv(FULL_PATH + '/data/south_mvcm_5000_{}.csv'
+                             .format(i)) for i in range(4)]
 
     def test_validate_names(self):
         b = self.a.copy()
@@ -106,6 +111,21 @@ class Test_Trace(ut.TestCase):
         assert self.t == new_t
         os.remove('./test_from_csv.csv')
     
+    def test_single_roundtrips(self):
+        source_from_file = self.real_singles[0]
+        from_df = Trace.from_df(source_from_file.to_df())
+        source_from_file._assert_allclose(from_df)
+
+    def test_ordering(self):
+        for ch, alone in zip(self.real_mt.chains, self.real_singles):
+            Trace(ch)._assert_allclose(alone)
+
+    def test_multi_roundtrips(self):
+        dfs = self.real_mt.to_df()
+        new = Trace.from_df(*dfs)
+        new._assert_allclose(self.real_mt)
+
+
     @ut.skip
     def test_from_pymc3(self):
         raise NotImplementedError

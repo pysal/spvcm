@@ -1,5 +1,6 @@
 from hlm.hierarchical.svcp import SVCP
 from hlm.tests.utils import Model_Mixin
+from hlm.abstracts import Trace
 import unittest as ut
 import pandas as pd
 import pysal as ps

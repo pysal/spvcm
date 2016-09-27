@@ -2,6 +2,7 @@ from scipy import sparse as spar
 import numpy as np
 from numpy import linalg as nla
 from scipy.sparse import linalg as spla
+import pysal as ps
 import scipy.linalg as scla
 from warnings import warn as Warn
 
@@ -22,6 +23,10 @@ def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
     logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
     grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
     return grid
+
+##########################
+# BUILD EXAMPLE DATASETS #
+##########################
 
 def south(df=False):
     """
@@ -63,6 +68,19 @@ def south(df=False):
     else:
         return d
 
+def baltim(df=False):
+    baltim = ps.pdio.read_files(ps.examples.get_path('baltim.shp'))
+    coords = baltim[['X', 'Y']].values
+    Y = np.log(baltim.PRICE.values).reshape(-1,1)
+    Yz = Y - Y.mean()
+    X = baltim[['AGE', 'LOTSZ', 'SQFT']].values
+    Xz = X-X.mean(axis=0)
+    out = {'Y':Yz, 'X':Xz, 'coordinates':coords}
+    if df:
+        return out, baltim
+    else:
+        return out
+    
 ####################
 # MATRIX UTILITIES #
 ####################
