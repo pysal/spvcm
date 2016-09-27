@@ -25,4 +25,4 @@ class Test_SVCP(Model_Mixin, ut.TestCase):
         
         self.cls = SVCP
         instance = self.cls(**self.inputs, n_samples=0)
-        self.answer_df = pd.read_csv(FULL_PATH + '/data/svcp.csv')
+        self.answer_trace = Trace.from_csv(FULL_PATH + '/data/svcp.csv')

@@ -6,6 +6,7 @@ import copy
 from ...both_levels.generic import Base_Generic
 from ... import verify
 from ...utils import se_covariance, ind_covariance
+from ...priors import constant
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Rho']
@@ -14,11 +15,11 @@ class Base_Lower_SE(Base_Generic):
     """
     The class that actually ends up setting up the Generic model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the
-    sample function n_samples times to the state. 
+    sample function n_samples times to the state.
     """
     def __init__(self, Y, X, W, Delta, n_samples=1000, **_configs):
         n_jobs = _configs.pop('n_jobs', 1)
-        super(Base_Lower_SE, self).__init__(Y, X, W, np.eye(Delta.shape[1]), Delta, 
+        super(Base_Lower_SE, self).__init__(Y, X, W, np.eye(Delta.shape[1]), Delta,
                                       n_samples=0, skip_covariance=True, **_configs)
         self.state.Psi_1 = se_covariance
         self.state.Psi_2 = ind_covariance
@@ -47,18 +48,14 @@ class Base_Lower_SE(Base_Generic):
         st.Betas_covm = np.dot(st.Betas_cov0, st.Betas_mean0)
         st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
         st.Tau2_an = self.state.J / 2 + st.Tau2_a0
-        if st.LogRho0 is None:
-            eigenrange = st.Rho_max - st.Rho_min
-            Rho_logprior = np.log(1/eigenrange)
-            def LogRho0(value):
-                return Rho_logprior
-            st.LogRho0 = LogRho0
+        if st.Log_Rho0 is None:
+            st.Log_Rho0 = constant
 
-class Lower_SE(Base_Lower_SE): 
+class Lower_SE(Base_Lower_SE):
     """
     The class that intercepts & validates input
     """
-    def __init__(self, Y, X, W, Z=None, Delta=None, membership=None, 
+    def __init__(self, Y, X, W, Z=None, Delta=None, membership=None,
                  #data options
                  transform ='r', n_samples=1000, verbose=False,
                  **options):

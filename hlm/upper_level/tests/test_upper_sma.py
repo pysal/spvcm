@@ -1,6 +1,7 @@
 from hlm import upper
 from hlm import utils
-from hlm.tests.utils import Model_Mixin 
+from hlm.tests.utils import Model_Mixin
+from hlm.abstracts import Trace
 import unittest as ut
 import pandas as pd
 import os
@@ -13,4 +14,4 @@ class Test_Upper_SMA(Model_Mixin, ut.TestCase):
         self.cls = upper.SMA
         del self.inputs["W"]
         instance = self.cls(**self.inputs, n_samples=0)
-        self.answer_df = pd.read_csv(FULL_PATH + '/data/upper_sma.csv')
+        self.answer_trace = Trace.from_csv(FULL_PATH + '/data/upper_sma.csv')

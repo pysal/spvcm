@@ -6,7 +6,7 @@ import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-def _build_data():
+def build_data():
     models = []
     for cand in M.__dict__.values():
         if isinstance(cand, CLASSTYPES):

@@ -7,18 +7,18 @@ from ...utils import splogdet, chol_mvn
 from ...steps import metropolis
 from ...both_levels.generic.sample import logp_lambda, sample_spatial
 
-def sample(Model):
+def iteration(Model):
     st = Model.state
 
     ### Sample the Beta conditional posterior
-    ### P(beta | . ) \propto L(Y|.) \dot P(\beta) 
+    ### P(beta | . ) \propto L(Y|.) \dot P(\beta)
     ### is
     ### N(Sb, S) where
     ### S = (X' Sigma^{-1}_Y X + S_0^{-1})^{-1}
     ### b = X' Sigma^{-1}_Y (Y - Delta Alphas) + S^{-1}\mu_0
     covm_update = st.X.T.dot(st.X) / st.Sigma2
     covm_update += st.Betas_cov0i
-    covm_update = la.inv(covm_update) 
+    covm_update = la.inv(covm_update)
 
     resids = st.Y - st.Delta.dot(st.Alphas)
     XtSresids = st.X.T.dot(resids) / st.Sigma2
@@ -62,10 +62,10 @@ def sample(Model):
     bn = eta.T.dot(eta) * .5 + st.Sigma2_b0
     st.Sigma2 = stats.invgamma.rvs(st.Sigma2_an, scale=bn)
         
-    ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho) 
-    ### is 
+    ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho)
+    ### is
     ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
-    st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st, 
+    st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st,
                                logp=logp_lambda)
     st.PsiLambda = st.Psi_2(st.Lambda, st.M)
     st.PsiLambdai = la.inv(st.PsiLambda)

@@ -14,13 +14,10 @@ class Model_Mixin(object):
         instance = self.cls(**self.inputs, n_samples=0)
         np.random.seed(TEST_SEED)
         instance.draw()
-        trace_df = instance.trace.to_df()
-        for col in trace_df:
-            np.testing.assert_allclose(trace_df[col].values,
-                                       self.answer_df[col].values,
-                                       rtol=RTOL, atol=ATOL,
-                                       err_msg = 'Failed on {}'.format(col))
-
+        instance.trace._assert_allclose(self.answer_trace,
+                                        rtol=RTOL, atol=ATOL)
+    
+    @ut.skip
     def test_argument_parsing(self):
         #priors, initial values, etc.
         raise NotImplementedError

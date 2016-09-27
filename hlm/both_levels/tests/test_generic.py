@@ -2,11 +2,12 @@ from hlm import both as M
 from hlm import utils
 from hlm._constants import RTOL, ATOL, TEST_SEED, CLASSTYPES
 from hlm.tests.utils import Model_Mixin, run_with_seed
-from hlm.abstracts import Sampler_Mixin
+from hlm.abstracts import Sampler_Mixin, Trace
 import unittest as ut
 import numpy as np
 import pandas as pd
 import os
+import copy
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -15,18 +16,16 @@ class Test_Generic(Model_Mixin, ut.TestCase):
         Model_Mixin.build_self(self)
         self.cls = M.Generic
         instance = self.cls(**self.inputs, n_samples=0)
-        self.answer_df = pd.read_csv(FULL_PATH + '/data/generic.csv')
+        self.answer_trace = Trace.from_csv(FULL_PATH + '/data/generic.csv')
 
     def test_mvcm(self):
         instance = self.cls(**self.inputs, n_samples=0)
         np.random.seed(TEST_SEED)
         instance.draw()
-        trace_df = instance.trace.to_df()
-        other_answers = pd.read_csv(FULL_PATH + '/data/mvcm.csv')
-        for col in other_answers:
-            np.testing.assert_allclose(trace_df[col].values,
-                                       other_answers[col].values,
-                                       rtol=RTOL, atol=ATOL)
+        other_answers = Trace.from_csv(FULL_PATH + '/data/mvcm.csv')
+        strip_out = [col for col in instance.trace.varnames if col not in other_answers.varnames]
+        other_answers._assert_allclose(instance.trace.drop(
+                                       *strip_out, inplace=False))
     
     def test_membership_delta_mismatch(self):
         bad_D = np.ones(self.X.shape)

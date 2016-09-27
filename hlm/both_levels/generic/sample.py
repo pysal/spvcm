@@ -6,84 +6,6 @@ import numpy.linalg as la
 from ...utils import splogdet, chol_mvn
 from ...steps import metropolis
 
-def sample(Model):
-    st = Model.state
-
-    ### Sample the Beta conditional posterior
-    ### P(beta | . ) \propto L(Y|.) \dot P(\beta)
-    ### is
-    ### N(Sb, S) where
-    ### S = (X' Sigma^{-1}_Y X + S_0^{-1})^{-1}
-    ### b = X' Sigma^{-1}_Y (Y - Delta Alphas) + S^{-1}\mu_0
-    covm_update = st.X.T.dot(st.PsiRhoi).dot(st.X) / st.Sigma2
-    covm_update += st.Betas_cov0i
-    covm_update = la.inv(covm_update)
-
-    resids = st.Y - st.Delta.dot(st.Alphas)
-    XtSresids = st.X.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
-    mean_update = XtSresids + st.Betas_cov0i.dot(st.Betas_mean0)
-    mean_update = np.dot(covm_update, mean_update)
-    st.Betas = chol_mvn(mean_update, covm_update)
-    st.XBetas = np.dot(st.X, st.Betas)
-
-    ### Sample the Random Effect conditional posterior
-    ### P( Alpha | . ) \propto L(Y|.) \dot P(Alpha | \lambda, Tau2)
-    ###                               \dot P(Tau2) \dot P(\lambda)
-    ### is
-    ### N(Sb, S)
-    ### Where
-    ### S = (Delta'Sigma_Y^{-1}Delta + Sigma_Alpha^{-1})^{-1}
-    ### b = (Delta'Sigma_Y^{-1}(Y - X\beta) + 0)
-    covm_update = st.Delta.T.dot(st.PsiRhoi).dot(st.Delta) / st.Sigma2
-    covm_update += st.PsiLambdai / st.Tau2
-    covm_update = la.inv(covm_update)
-
-    resids = st.Y - st.XBetas
-    mean_update = st.Delta.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
-    mean_update = np.dot(covm_update, mean_update)
-    st.Alphas = chol_mvn(mean_update, covm_update)
-    st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
-
-    ### Sample the Random Effect aspatial variance parameter
-    ### P(Tau2 | .) \propto L(Y|.) \dot P(\Alpha | \lambda, Tau2)
-    ###                            \dot P(Tau2) \dot P(\lambda)
-    ### is
-    ### IG(J/2 + a0, u'(\Psi(\lambda))^{-1}u * .5 + b0)
-    bn = st.Alphas.T.dot(st.PsiLambdai).dot(st.Alphas) * .5 + st.Tau2_b0
-    st.Tau2 = stats.invgamma.rvs(st.Tau2_an, scale=bn)
-    
-    ### Sample the response aspatial variance parameter
-    ### P(Sigma2 | . ) \propto L(Y | .) \dot P(Sigma2)
-    ### is
-    ### IG(N/2 + a0, eta'Psi(\rho)^{-1}eta * .5 + b0)
-    ### Where eta is the linear predictor, Y - X\beta + \DeltaAlphas
-    eta = st.Y - st.XBetas - st.DeltaAlphas
-    bn = eta.T.dot(st.PsiRhoi).dot(eta) * .5 + st.Sigma2_b0
-    st.Sigma2 = stats.invgamma.rvs(st.Sigma2_an, scale=bn)
-
-    ### Sample the spatial components using metropolis-hastings
-    ### P(Psi(\lambda) | .) \propto L(Y | .) \dot P(\lambda)
-    ### is
-    ### |Psi(lambda)|^{-1/2} exp(1/2(Alphas'Psi(lambda)^{-1}Alphas * Tau2^{-1}))
-    ###  * 1/(emax-emin)
-    st.Rho = sample_spatial(Model.configs.Rho, st.Rho, st,
-                            logp=logp_rho)
-    
-    st.PsiRho = st.Psi_1(st.Rho, st.W)
-    st.PsiSigma2 = st.PsiRho.dot(st.In*st.Sigma2)
-    st.PsiSigma2i = la.inv(st.PsiSigma2)
-    st.PsiRhoi = la.inv(st.PsiRho)
-        
-    ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho)
-    ### is
-    ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
-    st.Lambda = sample_spatial(Model.configs.Lambda, st.Lambda, st,
-                               logp=logp_lambda)
-    st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-    st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
-    st.PsiTau2i = la.inv(st.PsiTau2)
-    st.PsiLambdai = la.inv(st.PsiLambda)
-
 #############################
 # SPATIAL SAMPLE METHODS    #
 #############################
@@ -146,7 +68,7 @@ def logp_rho(state, val):
     eta = st.Y - st.XBetas - st.DeltaAlphas
     kernel = eta.T.dot(PsiRhoi).dot(eta) / st.Sigma2
 
-    return -.5*logdet -.5 * kernel + st.LogRho0(val)
+    return -.5*logdet -.5 * kernel + st.Log_Rho0(val)
 
 def logp_lambda(state, val):
     """
@@ -167,4 +89,4 @@ def logp_lambda(state, val):
 
     kernel = st.Alphas.T.dot(PsiLambdai).dot(st.Alphas) / st.Tau2
 
-    return -.5*logdet - .5*kernel + st.LogLambda0(val)
+    return -.5*logdet - .5*kernel + st.Log_Lambda0(val)
