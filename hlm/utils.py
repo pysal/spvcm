@@ -9,20 +9,22 @@ from warnings import warn as Warn
 __all__ = ['grid_det']
 PUBLIC_DICT_ATTS = [k for k in dir(dict) if not k.startswith('_')]
 
-def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
+##########################
+# GENERAL PURPOSE UTILS  #
+##########################
+
+def no_op(*_, **__):
     """
-    This is a utility function to set up the grid of matrix determinants over a
-    range of spatial parameters for a given W.
+    This is a no-op. It takes any arguments,
+    keyword or positional, and returns none
     """
-    if (parmin is None) and (parmax is None):
-        parmin, parmax = speigen_range(W)
-    if parstep is None:
-        parstep = (parmax - parmin) / 1000
-    if grid is None:
-        grid = np.arange(parmin, parmax, parstep)
-    logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
-    grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
-    return grid
+    return
+
+def thru_op(*args, **kws):
+    """
+    This is a thru-op. It returns everything passed to it.
+    """
+    return args, kws
 
 ##########################
 # BUILD EXAMPLE DATASETS #
@@ -212,7 +214,7 @@ def chol_mvn(Mu, Sigma):
     return out
 
 def sma_covariance(param, W):
-    # type (float, W) -> np.dnarray
+    # type (float, np.ndarray) -> np.dnarray
     """
     This computes a covariance matrix for a SMA-type error specification:
 
@@ -225,18 +227,29 @@ def sma_covariance(param, W):
     return whole.toarray()
 
 def se_covariance(param, W):
-    # type (float, W) -> np.dnarray
+    # type (float, sparse) -> np.dnarray
     """
     This computes a covariance matrix for a SAR-type error specification:
 
     ( (I - param * W)^T(I - param * W) )^{-1}
     
-    and always returns a dense matrix
+    and always returns a dense matrix.
+    
+    This first calls se_precision, and then inverts the results of that call.
 
     """
+    prec = se_precision(param, W)
+    return np.linalg.inv(prec)
+    
+def se_precision(param, W):
+    # type (float, sparse) -> np.ndarray
+    """
+    This computes a precision matrix for a SAR-type error specification.
+    
+    """
     half = speye_like(W) - param * W
-    to_inv = half.T.dot(half)
-    return np.linalg.inv(to_inv.toarray())
+    prec = half.T.dot(half)
+    return prec.toarray()
 
 def ind_covariance(param, W):
     """
@@ -247,3 +260,19 @@ def ind_covariance(param, W):
     and always returns a dense matrix. Thus, it ignores param entirely.
     """
     return np.eye(W.shape[0])
+
+
+def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
+    """
+    This is a utility function to set up the grid of matrix determinants over a
+    range of spatial parameters for a given W.
+    """
+    if (parmin is None) and (parmax is None):
+        parmin, parmax = speigen_range(W)
+    if parstep is None:
+        parstep = (parmax - parmin) / 1000
+    if grid is None:
+        grid = np.arange(parmin, parmax, parstep)
+    logdets = [splogdet(speye_like(W) - rho * W) for rho in grid]
+    grid = np.vstack((grid, np.array(logdets).reshape(grid.shape)))
+    return grid

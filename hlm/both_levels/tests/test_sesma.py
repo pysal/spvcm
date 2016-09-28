@@ -5,9 +5,9 @@ import unittest as ut
 import pandas as pd
 from .make_data import FULL_PATH
 
-class Test_SESMA(Model_Mixin, ut.TestCase):
+class Test_SESMA(ut.TestCase, Model_Mixin):
     def setUp(self):
-        Model_Mixin.build_self(self)
+        super(Test_SESMA, self).build_self()
         self.cls = M.SESMA
         self.instance = self.cls(**self.inputs, n_samples=0)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/sesma.csv')

@@ -364,6 +364,8 @@ class Trace(object):
         return True
     
     def _assert_allclose(self, other, **allclose_kw):
+        ignore_shape = allclose_kw.pop('ignore_shape', False)
+        squeeze = allclose_kw.pop('squeeze', True)
         try:
             assert set(self.varnames) == set(other.varnames)
         except AssertionError:
@@ -374,9 +376,17 @@ class Trace(object):
         for ch1, ch2 in zip(self.chains, other.chains):
             for k,v in ch1.items():
                 allclose_kw['err_msg'] = 'Failed on {}'.format(k)
-                np.testing.assert_allclose(np.squeeze(v),
-                                           np.squeeze(ch2[k]),
-                                           **allclose_kw)
+                if ignore_shape:
+                    A = [np.asarray(item).flatten() for item in v]
+                    B = [np.asarray(item).flatten() for item in ch2[k]]
+                elif squeeze:
+                    A = [np.squeeze(item) for item in v]
+                    B = [np.squeeze(item) for item in ch2[k]]
+                else:
+                    A = v
+                    B = ch2[k]
+                np.testing.assert_allclose(A,B,**allclose_kw)
+                    
     
     def to_df(self):
         """
@@ -396,7 +406,7 @@ class Trace(object):
                 if len(rest) == 0:
                     pass
                 elif len(rest) == 1:
-                    records = records.reshape(n,k*rest)
+                    records = records.reshape(n,int(k*rest[0]))
                 else:
                     raise Exception("Parameter '{}' has too many dimensions"
                                     " to flatten able to be flattend?"               .format(split))
@@ -444,16 +454,21 @@ class Trace(object):
             df = dfs[0]
         if varnames is None:
             varnames = df.columns
-        unique_stems = []
+        unique_stems = set()
         for col in varnames:
             suffix_split = col.split(combine_suffix)
             if suffix_split[0] == col:
-                unique_stems.append(col)
+                unique_stems.update([col])
             else:
-                unique_stems.append('_'.join(suffix_split[:-1]))
+                unique_stems.update(['_'.join(suffix_split[:-1])])
         out = dict()
         for stem in unique_stems:
-            cols = [var for var in df.columns if var.startswith(stem)]
+            cols = []
+            for var in df.columns:
+                if var == stem:
+                    cols.append(var)
+                elif '_'.join(var.split('_')[:-1]) == stem:
+                    cols.append(var)
             if len(cols) == 1:
                 targets = df[cols].values.flatten().tolist()
             else:

@@ -10,9 +10,8 @@ from .sample import sample
 
 import types
 
-from ...abstracts import Sampler_Mixin
+from ...abstracts import Sampler_Mixin, Trace
 from ...utils import speigen_range, splogdet
-from ...trace import Trace
 from ... import verify
 
 SAMPLERS = ['Betas', 'Thetas', 'Sigma2_e', 'Sigma2_u', 'Rho', 'Lambda']

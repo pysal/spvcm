@@ -8,9 +8,9 @@ import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-class Test_Upper_SMA(Model_Mixin, ut.TestCase):
+class Test_Upper_SMA(ut.TestCase, Model_Mixin):
     def setUp(self):
-        Model_Mixin.build_self(self)
+        super(Test_Upper_SMA, self).build_self()
         self.cls = upper.SMA
         del self.inputs["W"]
         instance = self.cls(**self.inputs, n_samples=0)

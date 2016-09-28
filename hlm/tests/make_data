@@ -1,8 +1,0 @@
-from hlm.utils import south
-import hlm
-from hlm._constants import TEST_SEED
-import numpy as np
-
-def make_data():
-    data = south()
-    model = hlm.

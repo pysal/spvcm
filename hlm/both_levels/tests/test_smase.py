@@ -5,9 +5,9 @@ import unittest as ut
 import pandas as pd
 from .make_data import FULL_PATH
 
-class Test_SMASE(Model_Mixin, ut.TestCase):
+class Test_SMASE(ut.TestCase, Model_Mixin):
     def setUp(self):
-        Model_Mixin.build_self(self)
+        super(Test_SMASE, self).build_self()
         self.cls = M.SMASE
         self.instance = self.cls(**self.inputs, n_samples=0)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/smase.csv')

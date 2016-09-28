@@ -11,9 +11,9 @@ import copy
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-class Test_Generic(Model_Mixin, ut.TestCase):
+class Test_Generic(ut.TestCase, Model_Mixin):
     def setUp(self):
-        Model_Mixin.build_self(self)
+        super(Test_Generic, self).build_self()
         self.cls = M.Generic
         instance = self.cls(**self.inputs, n_samples=0)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/generic.csv')

@@ -8,9 +8,9 @@ import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-class Test_Upper_SE(Model_Mixin, ut.TestCase):
+class Test_Upper_SE(ut.TestCase, Model_Mixin):
     def setUp(self):
-        Model_Mixin.build_self(self)
+        super(Test_Upper_SE, self).build_self()
         self.cls = upper.SE
         del self.inputs["W"]
         instance = self.cls(**self.inputs, n_samples=0)

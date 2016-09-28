@@ -7,14 +7,14 @@ import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-def _make_data():
+def make_data():
     inputs = baltim() 
     inputs['n_samples'] = 0
     inputs['phi_jump'] = .5
     model = SVCP(**inputs)
     np.random.seed(TEST_SEED)
     model.draw()
-    model.trace.to_df().to_csv(FULL_PATH + '/data/svcp.csv')
+    model.trace.to_csv(FULL_PATH + '/data/svcp.csv')
 
 if __name__ == '__main__':
-    _make_data()
+    make_data()
