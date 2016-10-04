@@ -23,7 +23,10 @@ class SESE(Base_SESE):
                  **options):
         W,M = verify.weights(W, M, transform=transform)
         self.M = M
-
+        
+        Y = Y - Y.mean() / Y.std()
+        X = X - X.mean(axis=0) / X.std()
+        
         N,_ = X.shape
         J = M.n
         Mmat = M.sparse

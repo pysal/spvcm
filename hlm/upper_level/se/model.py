@@ -119,6 +119,9 @@ class Upper_SE(Base_Upper_SE):
         _, M = verify.weights(None, M, transform=transform)
         self.M = M
         Mmat = M.sparse
+        
+        Y = Y - Y.mean() / Y.std()
+        X = X - X.mean(axis=0) / X.std()
 
         N,_ = X.shape
         if Delta is not None:

@@ -63,6 +63,9 @@ class Lower_SE(Base_Lower_SE):
         self.W = W
         Wmat = W.sparse
 
+        Y = Y - Y.mean() / Y.std()
+        X = X - X.mean(axis=0) / X.std()
+
         N,_ = X.shape
         if Delta is not None:
             J = Delta.shape[1]

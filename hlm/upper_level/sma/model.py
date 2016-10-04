@@ -18,11 +18,11 @@ class Base_Upper_SMA(Base_Generic):
     """
     The class that actually ends up setting up the Generic model. Sets configs,
     data, truncation, and initial parameters, and then attempts to apply the
-    sample function n_samples times to the state. 
+    sample function n_samples times to the state.
     """
     def __init__(self, Y, X, M, Delta, n_samples=1000, **_configs):
         W = np.eye((Delta.shape[0]))
-        super(Base_Upper_SMA, self).__init__(Y, X, W, M, Delta, 
+        super(Base_Upper_SMA, self).__init__(Y, X, W, M, Delta,
                                       n_samples=0, skip_covariance=True, **_configs)
         st = self.state
         self.state.Psi_1 = ind_covariance
@@ -42,17 +42,20 @@ class Base_Upper_SMA(Base_Generic):
                 Warn('Encountered the following LinAlgError. '
                      'Model will return for debugging. \n {}'.format(e))
 
-class Upper_SMA(Base_Upper_SMA): 
+class Upper_SMA(Base_Upper_SMA):
     """
     The class that intercepts & validates input
     """
-    def __init__(self, Y, X, M, Z=None, Delta=None, membership=None, 
+    def __init__(self, Y, X, M, Z=None, Delta=None, membership=None,
                  #data options
                  transform ='r', n_samples=1000, verbose=False,
                  **options):
         _, M = verify.weights(None, M, transform=transform)
         self.M = M
         Mmat = M.sparse
+
+        Y = Y - Y.mean() / Y.std()
+        X = X - X.mean(axis=0) / X.std()
 
         N,_ = X.shape
         if Delta is not None:

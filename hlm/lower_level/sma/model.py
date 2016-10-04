@@ -62,6 +62,9 @@ class Lower_SMA(Base_Lower_SMA):
         W,_ = verify.weights(W, None, transform=transform)
         self.W = W
         Wmat = W.sparse
+        
+        Y = Y - Y.mean() / Y.std()
+        X = X - X.mean(axis=0) / X.std()
 
         N,_ = X.shape
         if Delta is not None:

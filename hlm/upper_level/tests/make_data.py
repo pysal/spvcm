@@ -8,7 +8,7 @@ import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-def _build_data():
+def build():
     models = []
     for cand in upper.__dict__.values():
         if isinstance(cand, CLASSTYPES):
