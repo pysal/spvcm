@@ -8,11 +8,13 @@ import os
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
 
-def make_data():
+def build():
     data = south()
     model = hlm.both.MVCM(**data, n_samples=0)
     np.random.seed(TEST_SEED)
+    print('starting South 5000, njobs=4')
     model.sample(5000,n_jobs=4)
+    print('starting PSRF')
     known_brooks = psrf(model)
     known_gr = psrf(model, method='original')
     
@@ -24,5 +26,3 @@ def make_data():
     model.trace.to_csv(FULL_PATH + '/data/' + 'south_mvcm_5000.csv')
     return ([FULL_PATH + '/data/' + 'psrf_{}.json'.format(k)
              for k in ['brooks', 'gr']] + [FULL_PATH + '/data/south_mvcm_5000.csv'])
-if __name__ == '__main__':
-    make_data()

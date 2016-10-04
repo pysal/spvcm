@@ -32,14 +32,14 @@ class Test_PSRF(ut.TestCase):
         for k,v in exp_brooks.items():
             if k == 'Alphas':
                 continue
-            np.testing.assert_allclose(v, self.known_brooks[k],
+            np.testing.assert_allclose(v, np.squeeze(self.known_brooks[k]),
                                        rtol=RTOL, atol=ATOL,
                                        err_msg='Failed in {}'.format(k))
         exp_gr = psrf(trace=self.trace, method='original')
         for k,v in exp_gr.items():
             if k == 'Alphas':
                 continue
-            np.testing.assert_allclose(v, self.known_gr[k],
+            np.testing.assert_allclose(v, np.squeeze(self.known_gr[k]),
                                        rtol=RTOL, atol=ATOL,
                                        err_msg='Failed in {}'.format(k))
     
@@ -48,7 +48,7 @@ class Test_PSRF(ut.TestCase):
         for k,v in exp_brooks.items():
             if k == 'Alphas':
                 continue
-            np.testing.assert_allclose(v, self.known_brooks[k],
+            np.testing.assert_allclose(v, np.squeeze(self.known_brooks[k]),
                                        rtol=RTOL, atol=ATOL,
                                        err_msg='Failed in {}'.format(k))
         exp_brooks = psrf(chain=self.mockmodel.trace['Tau2'])
@@ -60,14 +60,14 @@ class Test_PSRF(ut.TestCase):
         for k,v in self.noburn.items():
             if k == 'Alphas':
                 continue
-            np.testing.assert_allclose(v, test_completion[k],
+            np.testing.assert_allclose(v, np.squeeze(test_completion[k]),
                                        rtol=RTOL, atol=ATOL,
                                        err_msg='Failed in {}'.format(k))
         limit_vars = psrf(trace=self.trace, varnames=['Tau2', 'Sigma2'])
         for k,v in limit_vars.items():
             if k == 'Alphas':
                 continue
-            np.testing.assert_allclose(v, limit_vars[k],
+            np.testing.assert_allclose(v, np.squeeze(limit_vars[k]),
                                        rtol=RTOL, atol=ATOL,
                                        err_msg='Failed in {}'.format(k))
         
