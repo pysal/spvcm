@@ -10,6 +10,8 @@ FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
 def build():
     data = south()
+    del data['W']
+    del data['M']
     model = hlm.both.MVCM(**data, n_samples=0)
     np.random.seed(TEST_SEED)
     print('starting South 5000, njobs=4')

@@ -10,6 +10,7 @@ from pysal.spreg.utils import sphstack, spdot
 from .sample import sample_spatial, logp_rho, logp_lambda
 from ...abstracts import Sampler_Mixin, Hashmap, Trace
 from ... import verify
+from ... steps import Metropolis, Slice
 from ... import priors
 from ...utils import speigen_range, splogdet, ind_covariance, chol_mvn
 
@@ -21,30 +22,41 @@ class Base_Generic(Sampler_Mixin):
     data, truncation, and initial parameters, and then attempts to apply the
     sample function n_samples times to the state.
     """
-    def __init__(self, Y, X, W, M, Delta, n_samples=1000, **_configs):
-        
-        skip_covariance = _configs.pop('skip_covariance', False)
+    def __init__(self, Y, X, W, M, Delta,
+                 n_samples=1000, n_jobs=1,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None,
+                 configs=None,
+                 truncation=None):
         
         N, p = X.shape
         _N, J = Delta.shape
-        n_jobs = _configs.pop('n_jobs', 1)
         self.state = Hashmap(**{'X':X, 'Y':Y, 'M':M, 'W':W, 'Delta':Delta,
                            'N':N, 'J':J, 'p':p })
         self.traced_params = copy.deepcopy(SAMPLERS)
-        extras = _configs.pop('extra_traced_params', None)
-        if extras is not None:
-            self.traced_params.extend(extras)
+        if extra_traced_params is not None:
+            self.traced_params.extend(extra_traced_params)
         hashmaps = [{k:[] for k in self.traced_params}]*n_jobs
         self.trace = Trace(*hashmaps)
-        leftovers = self._setup_data(**_configs)
-        self._setup_configs(**leftovers)
-        self._setup_truncation()
-        self._setup_initial_values()
-
-        if not skip_covariance:
-            self.state.Psi_1 = ind_covariance
-            self.state.Psi_2 = ind_covariance
-            self._setup_covariance()
+        
+        if priors is None:
+            priors = dict()
+        if starting_values is None:
+            starting_values = dict()
+        if configs is None:
+            configs = dict()
+        if truncation is None:
+            truncation = dict()
+        
+        self._setup_priors(**priors)
+        self._setup_configs(**configs)
+        self._setup_truncation(**truncation)
+        self._setup_starting_values(**starting_values)
+        
+        ## Covariance, computing the starting values
+        self.state.Psi_1 = ind_covariance
+        self.state.Psi_2 = ind_covariance
 
         
         self.cycles = 0
@@ -56,7 +68,11 @@ class Base_Generic(Sampler_Mixin):
                 Warn('Encountered the following LinAlgError. '
                      'Model will return for debugging. \n {}'.format(e))
 
-    def _setup_data(self, **hypers):
+    def _setup_priors(self, Betas_cov0 = None, Betas_mean0=None,
+                      Sigma2_a0 = .001, Sigma2_b0 = .001,
+                      Tau2_a0 = .001, Tau2_b0 = .001,
+                      Log_Lambda0 = None,
+                      Log_Rho0 = None):
         """
         This sets up the data and hyperparameters of the problem.
         If the hyperparameters are to be adjusted, pass them as keyword arguments.
@@ -66,71 +82,95 @@ class Base_Generic(Sampler_Mixin):
         None
 
         """
-        In = np.identity(self.state.N)
-        Ij = np.identity(self.state.J)
-        ## Prior specifications
-        Sigma2_a0 = hypers.pop('Sigma2_a0', .001)
-        Sigma2_b0 = hypers.pop('Sigma2_b0', .001)
-        Betas_cov0 = hypers.pop('Betas_cov0', np.eye(self.state.p) * 100)
-        Betas_mean0 = hypers.pop('Betas_mean0', np.zeros((self.state.p, 1)))
-        Tau2_a0 = hypers.pop('Tau2_a0', .001)
-        Tau2_b0 = hypers.pop('Tau2_b0', .001)
-        Log_Lambda0 = hypers.pop('Log_Lambda0', None)
-        Log_Rho0 = hypers.pop('Log_Rho0', None)
+        st = self.state
+        st.Sigma2_a0 = Sigma2_a0
+        st.Sigma2_b0 = Sigma2_b0
+        if Betas_cov0 is None:
+            Betas_cov0 = np.eye(self.state.p) * 100
+        if Betas_mean0 is None:
+            Betas_mean0 = np.zeros((self.state.p, 1))
+        st.Betas_cov0 = Betas_cov0
+        st.Betas_mean0 = Betas_mean0
+        st.Tau2_a0 = .001
+        st.Tau2_b0 = .001
+        if Log_Lambda0 is None:
+            Log_Lambda0 = priors.constant
+        if Log_Rho0 is None:
+            Log_Rho0 = priors.constant
+        st.Log_Lambda0 = Log_Lambda0
+        st.Log_Rho0 = Log_Rho0
 
-        XtX = np.dot(self.state.X.T, self.state.X)
-        DeltatDelta = np.dot(self.state.Delta.T, self.state.Delta)
-        
-        innovations = {k:v for k,v in dict(locals()).items() if k not in ['hypers', 'self']}
-        self.state.update(innovations)
-        return hypers
-    
-    def _finalize_invariants(self):
+    def _finalize(self):
         """
         This computes derived properties of hyperparameters that do not change
         over iterations. This is called one time before sampling.
         """
         st = self.state
+        
+        st.In = np.eye(st.N)
+        st.Ij = np.eye(st.J)
+        
+        ## Derived factors from the prior
         st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
         st.Betas_covm = np.dot(st.Betas_cov0, st.Betas_mean0)
         st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
         st.Tau2_an = self.state.J / 2 + st.Tau2_a0
-        if st.Log_Lambda0 is None:
-            st.Log_Lambda0 = priors.constant
-        if st.Log_Rho0 is None:
-            st.Log_Rho0 = priors.constant
+        
+        st.PsiRho = st.Psi_1(st.Rho, st.W)
+        st.PsiLambda = st.Psi_2(st.Lambda, st.M)
 
-    def _setup_configs(self, #would like to make these keyword only using *
-                 #multi-parameter options
-                 tuning=0,
-                 #spatial parameter grid sample configurations:
-                 Rho_jump=.5, Rho_ar_low=.4, Rho_ar_hi=.6,
-                 Rho_proposal=stats.norm, Rho_adapt_step=1.01,
-                 #spatial parameter grid sample configurations:
-                 Lambda_jump=.5, Lambda_ar_low=.4, Lambda_ar_hi=.6,
-                 Lambda_proposal=stats.norm, Lambda_adapt_step=1.01):
+        st.PsiSigma2 = st.PsiRho.dot(st.In * st.Sigma2)
+        st.PsiSigma2i = la.inv(st.PsiSigma2)
+        st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
+        st.PsiTau2i = la.inv(st.PsiTau2)
+
+        st.PsiRhoi = la.inv(st.PsiRho)
+        st.PsiLambdai = la.inv(st.PsiLambda)
+        
+        ## Data invariants
+        st.XtX = np.dot(self.state.X.T, self.state.X)
+        st.DeltatDelta = np.dot(self.state.Delta.T, self.state.Delta)
+
+        st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
+        st.XBetas = np.dot(st.X, st.Betas)
+
+
+    def _setup_configs(self, Lambda_method = 'met', Lambda_configs = None,
+                             Rho_method = 'met', Rho_configs = None):
         """
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
         """
-        self.configs = Hashmap()
-        self.configs.Rho = Hashmap(jump = Rho_jump, ar_low = Rho_ar_low,
-                                   ar_hi = Rho_ar_hi,
-                                   proposal = Rho_proposal,
-                                   adapt_step = Rho_adapt_step,
-                                   accepted = 0, rejected = 0,
-                                   max_adapt = tuning,
-                                   adapt = tuning > 0)
-        self.configs.Lambda = Hashmap(jump = Lambda_jump,
-                                      ar_low = Lambda_ar_low,
-                                      ar_hi = Lambda_ar_hi,
-                                      proposal = Lambda_proposal,
-                                      adapt_step = Lambda_adapt_step,
-                                      accepted = 0, rejected = 0,
-                                      max_adapt = tuning,
-                                      adapt = tuning > 0)
+        if Lambda_configs is None:
+            Lambda_configs = dict()
+        if Rho_configs is None:
+            Rho_configs = dict()
+        
+        if Lambda_method.lower().startswith('met'):
+            method = Metropolis
+            Lambda_configs['jump'] = .5
+        elif Lambda_method.lower().startswith('slice'):
+            method = Slice
+            Lambda_configs['width'] = .5
+        else:
+            raise Exception('Sample method for Lambda not understood:\n{}'
+                            .format(Lambda_method))
+        if Rho_method.lower().startswith('met'):
+            method = Metropolis
+            Rho_configs['jump'] = .5
+        elif Rho_method.lower().startswith('slice'):
+            method = Slice
+            Rho_configs['width'] = .5
+        else:
+            raise Exception('Sample method for Rho not understood:\n{}'
+                            .format(Rho_method))
 
-    def _setup_truncation(self):
+        self.configs = Hashmap()
+        self.configs.Rho = method('Rho', self, logp_rho, **Rho_configs)
+        self.configs.Lambda = method('Lambda', self, logp_lambda,   **Lambda_configs)
+
+    def _setup_truncation(self, Rho_min=None, Rho_max = None,
+                          Lambda_min = None, Lambda_max = None):
         """
         This computes truncations for the spatial parameters.
     
@@ -143,48 +183,47 @@ class Base_Generic(Sampler_Mixin):
         distribution according to this tuple
         """
         st = self.state
-        W_emin, W_emax = speigen_range(st.W)
-        st.Rho_min = 1./W_emin
-        st.Rho_max = 1./W_emax
-        M_emin, M_emax = speigen_range(st.M)
-        st.Lambda_min = 1./M_emin
-        st.Lambda_max = 1./M_emax
+        if hasattr(st, 'W'):
+            if (Rho_min is None) or (Rho_max is None):
+                W_emin, W_emax = speigen_range(st.W)
+            if (Rho_min is None):
+                Rho_min = 1./W_emin
+            if (Rho_max is None):
+                Rho_max = 1./W_emax
+            st.Rho_min = Rho_min
+            st.Rho_max = Rho_max
+        if hasattr(st, 'M'):
+            if (Lambda_min is None) or (Lambda_max is None):
+                M_emin, M_emax = speigen_range(st.M)
+            if (Lambda_min is None):
+                Lambda_min = 1./M_emin
+            if (Lambda_max is None):
+                Lambda_max = 1./M_emax
+            st.Lambda_min = Lambda_min
+            st.Lambda_max = Lambda_max
 
-    def _setup_initial_values(self):
+    def _setup_starting_values(self, Betas = None, Alphas = None,
+                               Sigma2 = 4, Tau2 = 4,
+                               Rho = None, Lambda = None):
         """
         Set arbitrary starting values for the Metropolis sampler
         """
-        Betas = np.zeros((self.state.p ,1))
-        Alphas = np.zeros((self.state.J, 1))
-        Sigma2 = 4
-        Tau2 = 4
-        Rho = -1.0 / (self.state.N - 1)
-        Lambda = -1.0 / (self.state.J - 1)
-        DeltaAlphas = np.dot(self.state.Delta, Alphas)
-        XBetas = np.dot(self.state.X, Betas)
-        
-        innovations = {k:v for k,v in dict(locals()).items() if k not in ['self']}
-        self.state.update(innovations)
-
-    def _setup_covariance(self):
-        """
-        Set up covariance, depending on model form. If this is SMA, the
-        utils.sma_covariance function will be used. If this is SAR-error, the
-        utils.ser_covariance function will be used.
-        """
         st = self.state
-        st.PsiRho = st.Psi_1(st.Rho, st.W)
-        st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-
-        st.PsiSigma2 = st.PsiRho.dot(st.In * st.Sigma2)
-        st.PsiSigma2i = la.inv(st.PsiSigma2)
-        st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
-        st.PsiTau2i = la.inv(st.PsiTau2)
+        if Betas is None:
+            Betas = np.zeros((self.state.p, 1))
+        if Alphas is None:
+            Alphas = np.zeros((self.state.J, 1))
+        st.Betas = Betas
+        st.Alphas = Alphas
+        st.Sigma2 = Tau2
+        st.Tau2 = Sigma2
+        if Rho is None:
+            Rho = -1.0 / (self.state.N - 1)
+        if Lambda is None:
+            Lambda = -1.0 / (self.state.J - 1)
+        st.Rho = Rho
+        st.Lambda = Lambda
         
-        st.PsiRhoi = la.inv(st.PsiRho)
-        st.PsiLambdai = la.inv(st.PsiLambda)
-    
-
     def _iteration(self):
         """
         Compute a single iteration of the sampler.
@@ -249,8 +288,7 @@ class Base_Generic(Sampler_Mixin):
         ### is
         ### |Psi(lambda)|^{-1/2} exp(1/2(Alphas'Psi(lambda)^{-1}Alphas * Tau2^{-1}))
         ###  * 1/(emax-emin)
-        st.Rho = sample_spatial(self.configs.Rho, st.Rho, st,
-                                logp=logp_rho)
+        st.Rho = self.configs.Rho(st)
         
         st.PsiRho = st.Psi_1(st.Rho, st.W)
         st.PsiSigma2 = st.PsiRho.dot(st.In*st.Sigma2)
@@ -260,8 +298,7 @@ class Base_Generic(Sampler_Mixin):
         ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho)
         ### is
         ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
-        st.Lambda = sample_spatial(self.configs.Lambda, st.Lambda, st,
-                                   logp=logp_lambda)
+        st.Lambda = self.configs.Lambda(st)
         st.PsiLambda = st.Psi_2(st.Lambda, st.M)
         st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
         st.PsiTau2i = la.inv(st.PsiTau2)

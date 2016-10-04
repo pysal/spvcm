@@ -4,16 +4,23 @@ from ... import verify
 import numpy as np
 
 class Base_SMASE(Base_Generic):
-    def __init__(self, Y, X, W, M, Delta, n_samples=1000, **configs):
-        super(Base_SMASE, self).__init__(Y, X, W, M, Delta, n_samples=0,
-                                        skip_covariance=True, **configs)
+    def __init__(self, Y, X, W, M, Delta,
+                 n_samples=1000, n_jobs=1,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None):
+        super(Base_SMASE, self).__init__(Y, X, W, M, Delta,
+                                        n_samples=0, n_jobs=n_jobs,
+                                        extra_traced_params=extra_traced_params,
+                                        priors=priors,
+                                        starting_values=starting_values)
         st = self.state
         self.state.Psi_1 = sma_covariance
         self.state.Psi_2 = se_covariance
-        self._setup_covariance()
+
         st.Rho_min, st.Rho_max = -st.Rho_max, -st.Rho_min
         try:
-            self.sample(n_samples)
+            self.sample(n_samples, n_jobs=n_jobs)
         except (np.linalg.LinAlgError, ValueError) as e:
             warn('Encountered the following LinAlgError. '
                  'Model will return for debugging purposes. \n {}'.format(e))
@@ -21,13 +28,15 @@ class Base_SMASE(Base_Generic):
 class SMASE(Base_SMASE):
     def __init__(self, Y, X, W, M, Z=None, Delta=None, membership=None,
                  #data options
-                 transform ='r', n_samples=1000, verbose=False,
-                 **options):
+                 transform ='r', verbose=False,
+                 n_samples=1000, n_jobs=1,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None):
         W,M = verify.weights(W, M, transform=transform)
         self.M = M
         
-        Y = Y - Y.mean() / Y.std()
-        X = X - X.mean(axis=0) / X.std()
+        Y,X = verify.center_and_scale(Y,X)
 
         N,_ = X.shape
         J = M.n
@@ -40,7 +49,12 @@ class SMASE(Base_SMASE):
 
         self._verbose = verbose
         if Z is not None:
+            Z, = verify.center_and_scale(Z)
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(SMASE, self).__init__(Y, X, Wmat, Mmat, Delta, n_samples,
-                                           **options)
+        super(SMASE, self).__init__(Y, X, Wmat, Mmat, Delta,
+                                   n_samples=n_samples,
+                                   n_jobs = n_jobs,
+                                   extra_traced_params=extra_traced_params,
+                                   priors=priors,
+                                   starting_values=starting_values)

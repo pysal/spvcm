@@ -31,7 +31,13 @@ class Model_Mixin(object):
     
 def run_with_seed(cls, env=utils.south(), seed=TEST_SEED, fprefix = ''):
     fname = str(cls).strip("'<>'").split('.')[-1].lower()
-    model = cls(**env, n_samples=0)
+    try:
+        model = cls(**env, n_samples=0)
+    except TypeError:
+        reduced = copy.deepcopy(env)
+        del reduced['M']
+        del reduced['W']
+        model = cls(**reduced, n_samples=0)
     np.random.seed(TEST_SEED)
     model.draw()
     model.trace.to_df().to_csv(fprefix + fname + '.csv', index=False)

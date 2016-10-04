@@ -17,19 +17,29 @@ class Base_Lower_SMA(Base_Generic):
     data, truncation, and initial parameters, and then attempts to apply the
     sample function n_samples times to the state.
     """
-    def __init__(self, Y, X, W, Delta, n_samples=1000, **_configs):
-        n_jobs = _configs.pop('n_jobs', 1)
-        super(Base_Lower_SMA, self).__init__(Y, X, W, np.eye(Delta.shape[1]), Delta,
-                                      n_samples=0, skip_covariance=True, **_configs)
-        self.state.Psi_1 = sma_covariance
-        self.state.Psi_2 = ind_covariance
-        self._setup_covariance()
+    def __init__(self, Y, X, W, Delta, n_samples=1000, n_jobs=1,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None,
+                 configs=None,
+                 truncation=None):
+        M = np.eye(Delta.shape[1])
+        super(Base_Lower_SMA, self).__init__(Y, X, W, M, Delta,
+                                            n_samples=0, n_jobs=n_jobs,
+                                            extra_traced_params=extra_traced_params,
+                                            priors=priors,
+                                            starting_values=starting_values,
+                                            truncation=truncation)
+
         original_traced = copy.deepcopy(self.traced_params)
         to_drop = [k for k in original_traced if k not in SAMPLERS]
         self.traced_params = copy.deepcopy(SAMPLERS)
         for param in to_drop:
             for i, _  in enumerate(self.trace.chains):
                 del self.trace.chains[i][param]
+        
+        self.state.Psi_1 = sma_covariance
+        self.state.Psi_2 = ind_covariance
 
         if n_samples > 0:
             try:
@@ -38,33 +48,23 @@ class Base_Lower_SMA(Base_Generic):
                 Warn('Encountered the following LinAlgError. '
                      'Model will return for debugging. \n {}'.format(e))
 
-    def _finalize_invariants(self):
-        """
-        This computes derived properties of hyperparameters that do not change
-        over iterations. This is called one time before sampling.
-        """
-        st = self.state
-        st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
-        st.Betas_covm = np.dot(st.Betas_cov0, st.Betas_mean0)
-        st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
-        st.Tau2_an = self.state.J / 2 + st.Tau2_a0
-        if st.Log_Rho0 is None:
-            st.Log_Rho0 = constant
-
 class Lower_SMA(Base_Lower_SMA):
     """
     The class that intercepts & validates input
     """
     def __init__(self, Y, X, W, Z=None, Delta=None, membership=None,
                  #data options
-                 transform ='r', n_samples=1000, verbose=False,
-                 **options):
+                 transform ='r', verbose=False,
+                 n_samples=1000, n_jobs=1,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None,
+                 truncation=None):
         W,_ = verify.weights(W, None, transform=transform)
         self.W = W
         Wmat = W.sparse
         
-        Y = Y - Y.mean() / Y.std()
-        X = X - X.mean(axis=0) / X.std()
+        Y,X = verify.center_and_scale(Y,X)
 
         N,_ = X.shape
         if Delta is not None:
@@ -78,7 +78,13 @@ class Lower_SMA(Base_Lower_SMA):
 
         self._verbose = verbose
         if Z is not None:
+            Z, = verify.center_and_scale(Z)
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(Lower_SMA, self).__init__(Y, X, Wmat, Delta, n_samples,
-                **options)
+        super(Lower_SMA, self).__init__(Y, X, Wmat, Delta,
+                                       n_samples=n_samples,
+                                       n_jobs = n_jobs,
+                                       extra_traced_params=extra_traced_params,
+                                       priors=priors,
+                                       starting_values=starting_values,
+                                       truncation=truncation)

@@ -38,6 +38,13 @@ def covariates(X):
     
     return X
 
+def center_and_scale(*arrays, axis=0):
+    """
+    This centers and scales the arrays provided along the axis provided.
+    """
+    return [(array - array.mean(axis=axis)) / array.std(axis=axis)
+            for array in arrays]
+
 def Delta_members(Delta, membership, N, J):
     """
     This computes and verifies a Delta or membership vector.

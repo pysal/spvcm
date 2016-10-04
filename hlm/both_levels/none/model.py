@@ -18,115 +18,79 @@ SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2']
 class Base_MVCM(Sampler_Mixin):
     """
     The class that actually ends up setting up the MVCM model. Sets configs,
-    data, truncation, and initial parameters, and then attempts to apply the
+    data, truncation, and starting parameters, and then attempts to apply the
     sample function n_samples times to the state.
     """
-    def __init__(self, Y, X, Delta, n_samples=1000, **_configs):
+    def __init__(self, Y, X, Delta,
+                 n_samples=1000, n_jobs=1,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None):
         
         N, p = X.shape
         _N, J = Delta.shape
-        n_jobs = _configs.pop('n_jobs', 1)
         self.state = Hashmap(**{'X':X, 'Y':Y, 'Delta':Delta,
                            'N':N, 'J':J, 'p':p })
-        self.traced_params = SAMPLERS
-        extras = _configs.pop('extra_tracked_params', None)
+        self.traced_params = copy.deepcopy(SAMPLERS)
+        extras = extra_traced_params
         if extras is not None:
             self.traced_params.extend(extra_tracked_params)
         hashmaps = [Hashmap(**{k:[] for k in self.traced_params})]*n_jobs
         self.trace = Trace(*hashmaps)
-        leftovers = self._setup_data(**_configs)
-        self._setup_configs(**leftovers)
-        self._setup_initial_values()
-        self._setup_covariance()
         
+        if priors is None:
+            priors = dict()
+        if starting_values is None:
+            starting_values = dict()
+        
+        leftovers = self._setup_priors(**priors)
+        self._setup_starting_values(**starting_values)
+
         self.cycles = 0
         
 
         try:
-            self.sample(n_samples)
+            self.sample(n_samples, n_jobs=n_jobs)
         except (np.linalg.LinAlgError, ValueError) as e:
             Warn('Encountered the following LinAlgError. '
                  'Model will return for debugging. \n {}'.format(e))
 
 
-    def _setup_data(self, **hypers):
-        In = np.identity(self.state.N)
-        Ij = np.identity(self.state.J)
+    def _setup_priors(self, Sigma2_a0=.001, Sigma2_b0 = .001,
+                      Betas_cov0 = None, Betas_mean0 = None,
+                      Tau2_a0 = .001, Tau2_b0 = .0001):
         ## Prior specifications
-        Sigma2_a0 = hypers.pop('Sigma2_a0', .001)
-        Sigma2_b0 = hypers.pop('Sigma2_b0', .001)
-        Betas_cov0 = hypers.pop('Betas_cov0', np.eye(self.state.p) * 100)
-        Betas_mean0 = hypers.pop('Betas_mean0', np.zeros((self.state.p, 1)))
-        Tau2_a0 = hypers.pop('Tau2_a0', .001)
-        Tau2_b0 = hypers.pop('Tau2_b0', .001)
+        st = self.state
+        st.Sigma2_a0 =  Sigma2_a0
+        st.Sigma2_b0 = Sigma2_b0
+        if Betas_cov0 is None:
+            Betas_cov0 = np.eye(self.state.p) * 100
+        st.Betas_cov0 = Betas_cov0
+        if Betas_mean0 is None:
+            Betas_mean0 = np.zeros((self.state.p, 1))
+        st.Betas_mean0 = Betas_mean0
+        st.Tau2_a0 = Tau2_a0
+        st.Tau2_b0 = Tau2_b0
 
-
-        XtX = np.dot(self.state.X.T, self.state.X)
-        DeltatDelta = np.dot(self.state.Delta.T, self.state.Delta)
-        
-        innovations = {k:v for k,v in dict(locals()).items() if k not in ['hypers', 'self']}
-        self.state.update(innovations)
-
-        return hypers
-    
-    def _finalize_invariants(self):
+    def _finalize(self):
         """
         This computes derived properties of hyperparameters that do not change
         over iterations. This is called one time before sampling.
         """
         st = self.state
+        
+        st.XtX = np.dot(st.X.T, st.X)
+        st.DeltatDelta = np.dot(st.Delta.T, st.Delta)
+        
         st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
         st.Betas_covm = np.dot(st.Betas_cov0, st.Betas_mean0)
-        st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
-        st.Tau2_an = self.state.J / 2 + st.Tau2_a0
-
-    def _setup_configs(self, #would like to make these keyword only using *
-                 #multi-parameter options
-                 truncate='eigs', tuning=0,
-                 #spatial parameter grid sample configurations:
-                 Rho_jump=.5, Rho_ar_low=.4, Rho_ar_hi=.6,
-                 Rho_proposal=stats.norm, Rho_adapt_step=1.01,
-                 #spatial parameter grid sample configurations:
-                 Lambda_jump=.5, Lambda_ar_low=.4, Lambda_ar_hi=.6,
-                 Lambda_proposal=stats.norm, Lambda_adapt_step=1.01,
-                 **kw):
-        """
-        Omnibus function to assign configuration parameters to the correct
-        configuration namespace
-        """
-        self.configs = Hashmap()
-        self.configs.Rho = Hashmap(jump=Rho_jump, ar_low=Rho_ar_low,
-                                   ar_hi = Rho_ar_hi, proposal=Rho_proposal,
-                                   adapt_step = Rho_adapt_step, rejected=0,
-                                   accepted=0, max_adapt=tuning,
-                                   adapt=tuning>0)
-        self.configs.Lambda = Hashmap(jump=Lambda_jump, ar_low=Lambda_ar_low,
-                                   ar_hi = Lambda_ar_hi, proposal=Lambda_proposal,
-                                   adapt_step = Lambda_adapt_step, rejected=0,
-                                   accepted=0, max_adapt=tuning,
-                                   adapt=tuning>0)
-
-    def _setup_initial_values(self):
-        """
-        Set abrbitrary starting values for the Metropolis sampler
-        """
-        Betas = np.zeros((self.state.p ,1))
-        Alphas = np.zeros((self.state.J, 1))
-        Sigma2 = 4
-        Tau2 = 4
-        DeltaAlphas = np.dot(self.state.Delta, Alphas)
-        XBetas = np.dot(self.state.X, Betas)
+        st.Sigma2_an = st.N / 2 + st.Sigma2_a0
+        st.Tau2_an = st.J / 2 + st.Tau2_a0
+        st.In = np.identity(st.N)
+        st.Ij = np.identity(st.J)
+        DeltaAlphas = np.dot(st.Delta, st.Alphas)
+        XBetas = np.dot(st.X, st.Betas)
         
-        innovations = {k:v for k,v in dict(locals()).items() if k not in ['self']}
-        self.state.update(innovations)
-
-    def _setup_covariance(self):
-        """
-        Set up covariance, depending on model form. If this is SMA, the
-        utils.sma_covariance function will be used. If this is SAR-error, the
-        utils.ser_covariance function will be used.
-        """
-        st = self.state
         st.Psi_1 = ind_covariance
         st.Psi_2 = ind_covariance
         
@@ -140,7 +104,21 @@ class Base_MVCM(Sampler_Mixin):
         
         st.PsiRhoi = la.inv(st.PsiRho)
         st.PsiLambdai = la.inv(st.PsiLambda)
-    
+
+    def _setup_starting_values(self, Betas=None, Alphas=None,
+                                Sigma2=4, Tau2=4):
+        """
+        Set abrbitrary starting values for the Metropolis sampler
+        """
+        if Betas is None:
+            Betas = np.zeros((self.state.p, 1))
+        if Alphas is None:
+            Alphas = np.zeros((self.state.J, 1))
+        self.state.Betas = Betas
+        self.state.Alphas = Alphas
+        self.state.Sigma2 = Sigma2
+        self.state.Tau2 = Tau2
+
     def _iteration(self):
         st = self.state
     
@@ -204,8 +182,14 @@ class MVCM(Base_MVCM):
     """
     def __init__(self, Y, X, Z=None, Delta=None, membership=None,
                  #data options
-                 sparse = True, transform ='r', n_samples=1000, verbose=False,
-                 **options):
+                 transform ='r', n_samples=1000, n_jobs=1,
+                 verbose=False,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None
+                 ):
+                     
+        Y, X = verify.center_and_scale(Y, X)
 
         N, _ = X.shape
         if Delta is not None:
@@ -215,14 +199,15 @@ class MVCM(Base_MVCM):
         else:
             raise UserWarning("No Delta matrix nor membership classification provided. Refusing to arbitrarily assign units to upper-level regions.")
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
-
-
-
         X = verify.covariates(X)
 
         self._verbose = verbose
         if Z is not None:
+            Z, = verify.center_and_scale(Z)
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(MVCM, self).__init__(Y, X, Delta, n_samples,
-                **options)
+        super(MVCM, self).__init__(Y, X, Delta, n_samples=n_samples,
+                                   n_jobs=n_jobs,
+                                   extra_traced_params = extra_traced_params,
+                                   priors=priors,
+                                   starting_values=starting_values)

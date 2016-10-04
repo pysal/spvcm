@@ -18,7 +18,7 @@ import os
 
 class Sampler_Mixin(object):
     def __init__(self):
-        pass
+        super(Sampler_Mixin, self).__init__()
 
     def sample(self, n_samples, n_jobs=1):
         """
@@ -63,7 +63,7 @@ class Sampler_Mixin(object):
         Take exactly one sample from the joint posterior distribution
         """
         if self.cycles == 0:
-            self._finalize_invariants()
+            self._finalize()
         self._iteration()
         self.cycles += 1
         for param in self.traced_params:
@@ -82,7 +82,7 @@ class Sampler_Mixin(object):
                 models[i].database = self.database + str(i)
             models[i].trace = Trace(**{k:[] for k in model.trace.varnames})
             if self.cycles == 0:
-                self._fuzz_starting_values(self)
+                models[i]._fuzz_starting_values()
         n_samples = [n_samples] * n_jobs
         seed = np.random.randint(0,10000, size=n_jobs).tolist()
         P = mp.Pool(n_jobs)
@@ -100,22 +100,31 @@ class Sampler_Mixin(object):
         self.state = [model.state for model in results]
         self.cycles += n_samples[0]
     
-    def _fuzz_starting_values(self, state):
-        return no_op(self, state)
+    def _fuzz_starting_values(self, state=None):
+        st = self.state
+        if hasattr(st, 'Betas'):
+            st.Betas += np.random.normal(0,5, size=st.Betas.shape)
+        if hasattr(st, 'Alphas'):
+            self.state.Alphas += np.random.normal(0,5,size=st.Alphas.shape)
+        if hasattr(st, 'Sigma2'):
+            self.state.Sigma2 += np.random.uniform(0,5)
+        if hasattr(st, 'Tau2'):
+            self.state.Tau2 += np.random.uniform(0,5)
+        if hasattr(st, 'Lambda'):
+            self.state.Lambda += np.random.uniform(-.5,.5)
+        if hasattr(st, 'Rho'):
+            self.state.Rho += np.random.uniform(-.5,.5)
     
-    def _finalize_invariants(self, **args):
+    def _finalize(self, **args):
         raise NotImplementedError
     
-    def _setup_data(self, **args):
-        raise NotImplementedError
-    
-    def _setup_configs(self, **args):
+    def _setup_priors(self, **args):
         raise NotImplementedError
     
     def _setup_truncation(self, **args):
         raise NotImplementedError
     
-    def _setup_initial_values(self, **args):
+    def _setup_starting_values(self, **args):
         raise NotImplementedError
 
     @property
@@ -126,7 +135,7 @@ class Sampler_Mixin(object):
     def database(self, filename):
         self._cxn, self._cur = start_sql(self, tracename=filename)
         self._db = filename
-
+    
 def _reflexive_sample(tup):
     """
     a helper function sample a bunch of models in parallel.
