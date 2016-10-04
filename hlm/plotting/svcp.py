@@ -29,9 +29,9 @@ def corrplot(m, burn=0, thin=None,
     phis = m.trace['Phi', burn::thin]
     f,ax = plt.subplots(1,2, **figure_kw)
     support = np.linspace(.001,1,num=1000)
-    ptiles = [[np.percentile(corrfunc(r, pwds).flatten(), ptile) 
+    ptiles = [[np.percentile(corrfunc(r, pwds).flatten(), ptile)
                for r in support] for ptile in percentiles]
-    empirical_median_correlation = [np.median(corrfunc(phi, pwds)) for phi in phis] 
+    empirical_median_correlation = [np.median(corrfunc(phi, pwds)) for phi in phis]
     for i, ptile in enumerate(ptiles):
         ax[0].plot(support*m.state.max_dist, ptile, **plot_kw[i])
     sns.kdeplot(np.asarray(empirical_median_correlation), ax=ax[1], **kde_kw[i])

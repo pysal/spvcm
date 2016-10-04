@@ -2,7 +2,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_trace(model, burn=0, thin=None, varnames=None, trace=None, 
+def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
                kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
     """
     Make a trace plot paired with a distributional plot.
@@ -40,11 +40,13 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
     if kde_kwargs == dict():
         kde_kwargs = {'shade':True, 'vertical':True}
     if trace_kwargs == dict():
-        trace_kwargs = {'linewidth':.5} 
+        trace_kwargs = {'linewidth':.5}
     fig, ax = plt.subplots(len(varnames), 2, **figure_kwargs)
     for chain_i, chain in enumerate(trace.chains):
         for i, param_name in enumerate(varnames):
             this_param = np.asarray(trace[chain_i,param_name,burn::thin])
+            if ax.ndim ==1:
+                ax = np.array((ax,),)
             if len(this_param.shape) == 3:
                 n,a,b = this_param.shape
                 this_param = this_param.reshape(n,a*b)

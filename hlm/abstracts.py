@@ -7,6 +7,7 @@ import multiprocessing as mp
 import sqlite3 as sql
 from .sqlite import head_to_sql, start_sql
 from .plotting.traces import plot_trace
+from .utils import no_op
 from collections import OrderedDict
 import pandas as pd
 import os
@@ -100,7 +101,22 @@ class Sampler_Mixin(object):
         self.cycles += n_samples[0]
     
     def _fuzz_starting_values(self, state):
-        pass
+        return no_op(self, state)
+    
+    def _finalize_invariants(self, **args):
+        raise NotImplementedError
+    
+    def _setup_data(self, **args):
+        raise NotImplementedError
+    
+    def _setup_configs(self, **args):
+        raise NotImplementedError
+    
+    def _setup_truncation(self, **args):
+        raise NotImplementedError
+    
+    def _setup_initial_values(self, **args):
+        raise NotImplementedError
 
     @property
     def database(self):

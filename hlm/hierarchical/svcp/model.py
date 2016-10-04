@@ -3,7 +3,7 @@ import numpy as np
 import copy
 import scipy.linalg as scla
 import scipy.sparse as spar
-from scipy import stats 
+from scipy import stats
 from scipy.spatial import distance as d
 from .utils import explode, nexp
 from .sample import sample_phi
@@ -22,7 +22,7 @@ class SVCP(Sampler_Mixin):
     Tau2    : prediction error for the model
 
     The distance matrix will be divided by the maximum distance,
-    so that it will vary between 0 and 1. 
+    so that it will vary between 0 and 1.
 
     Hyperparameters as given:
     a0          : tau location hyperparameter
@@ -38,27 +38,27 @@ class SVCP(Sampler_Mixin):
     """
     def __init__(self,
                  #data parameters
-                 Y, X, coordinates, n_samples=1000, 
+                 Y, X, coordinates, n_samples=1000, n_jobs=1,
                  # prior configuration parameters
-                 a0=2, b0=1, v0 = 3, Omega = None, mu0=0, mu_cov0=None, 
-                 phi_shape0=None, phi_rate0=None, phi_scale0=None, 
+                 a0=2, b0=1, v0 = 3, Omega = None, mu0=0, mu_cov0=None,
+                 phi_shape0=None, phi_rate0=None, phi_scale0=None,
                  #sampler starting values
                  Phi=None, T=None, Mus=None, Betas=None,
                  #Metropolis sampling parameters
-                 tuning=0, phi_jump=5, phi_adapt_step = 1.001, 
+                 tuning=0, phi_jump=5, phi_adapt_step = 1.001,
                  phi_ar_low=.4, phi_ar_hi=.6, phi_proposal=stats.norm,
                  #additional configuration parameters
-                 extra_traced_params = None, dmetric='euclidean', verbose=False, 
+                 extra_traced_params = None, dmetric='euclidean', verbose=False,
                  correlation_function=nexp,
                  **kwargs):
         n,p = X.shape
         Xs = X
         
         X = explode(X)
-
-
-        self.state = Hashmap(**kwargs) 
-        self.traced_params = ['Betas', 'Mus', 'T', 'Phi', 'Tau2'] 
+        if len(kwargs)>0:
+            warn('unrecognized arguments passed. Soring them in state:\n{}'.format(list(kwargs.keys())))
+        self.state = Hashmap(**kwargs)
+        self.traced_params = ['Betas', 'Mus', 'T', 'Phi', 'Tau2']
         if extra_traced_params is not None:
             self.traced_params.extend(extra_traced_params)
         self.trace = Trace(**{param:[] for param in self.traced_params})
@@ -92,7 +92,7 @@ class SVCP(Sampler_Mixin):
         self._setup_priors(a0, b0, v0, Omega, mu0, mu_cov0, phi_shape0, phi_rate0)
         self._setup_initials(Phi, T, Mus, Betas)
         self._compute_invariants()
-        self.configs = Hashmap() 
+        self.configs = Hashmap()
         self.configs.Phi = Hashmap(proposal=phi_proposal, accepted=0, rejected=0,
                                    adapt_step = phi_adapt_step, jump=phi_jump,
                                    ar_low = phi_ar_low, ar_hi = phi_ar_hi,
@@ -126,15 +126,23 @@ class SVCP(Sampler_Mixin):
         else:
             st.phi_shape0 = phi_shape0
         if phi_rate0 is None:
-           st.phi_rate0 = st.phi_shape0 / ((-.5*st.pwds.max() / np.log(.05))) 
+           st.phi_rate0 = st.phi_shape0 / ((-.5*st.pwds.max() / np.log(.05)))
         else:
             st.phi_rate0 = phi_rate0
 
     def _setup_initials(self, Phi, T, Mus, Betas):
+        """
+        Setup initial values of the sampler for parameters
+        
+        Defaults
+        ---------
+        Phi     : 3*shape/rate for the parameter by default.
+        T       : an identity matrix
+        Mu      : zeros
+        Beta    : zeros
+        """
         if T is None:
-            means = np.zeros((self.state.p,))
-            covm = np.identity((self.state.p)) * .00001
-            T = np.random.multivariate_normal(means, covm)
+            T = np.eye(self.state.p)
         self.state.T = T
         if Mus is None:
             Mus = np.zeros((1,self.state.p))
@@ -147,10 +155,12 @@ class SVCP(Sampler_Mixin):
         self.state.Phi = Phi
 
     def _compute_invariants(self):
+        """
+        Compute derived quantities that are intrinsic to the data. These
+        steps do not change with respect to the priors.
+        """
         st = self.state
         st.In = np.identity(st.n)
-        st.Tau_dof = st.a0 + st.n/2
-        st.T_dof = st.v0 + st.n
         st.XtX = st.X.T.dot(st.X)
         st.iota_n = np.ones((st.n,1))
         st.Xty = st.X.T.dot(st.Y)
@@ -160,15 +170,20 @@ class SVCP(Sampler_Mixin):
         st.np2p = np.vstack([np.eye(st.p) for _ in range(st.n)])
 
     def _finalize_invariants(self):
+        """
+        Compute derived quantities that make the sampling loop more efficient.
+        Once computed, the priors are considered "set."
+        """
         st = self.state
         st.mu_cov0_inv = scla.inv(st.mu_cov0)
         st.mu_kernel_prior = np.dot(st.mu_cov0_inv, st.mu0)
-    
+        st.Tau_dof = st.a0 + st.n/2
+        st.T_dof = st.v0 + st.n
 
     def _iteration(self):
         """
         Conduct one iteration of a Gibbs sampler for the self using the state
-        provided. 
+        provided.
         """
         st = self.state
         
@@ -185,7 +200,7 @@ class SVCP(Sampler_Mixin):
         st.tiled_Hinv = np.linalg.multi_dot([st.np2n, st.Hinv, st.np2n.T])
         st.tiled_Mus = np.kron(st.iota_n, st.Mus.reshape(-1,1))
         st.info = (st.Betas - st.tiled_Mus).dot((st.Betas - st.tiled_Mus).T)
-        st.kernel = np.multiply(st.tiled_Hinv, st.info) 
+        st.kernel = np.multiply(st.tiled_Hinv, st.info)
         st.covm_update = np.linalg.multi_dot([st.np2p.T, st.kernel, st.np2p])
         st.T = stats.invwishart.rvs(df=st.T_dof, scale=(st.covm_update + st.Omega0))
 
@@ -199,11 +214,11 @@ class SVCP(Sampler_Mixin):
         S = scla.inv(st.mu_cov0_inv + S_notinv_update)
         
         #compute location of mu_\betas
-        mkernel_update = np.linalg.multi_dot((st.Xs.T, Psi_inv, st.Y))  
+        mkernel_update = np.linalg.multi_dot((st.Xs.T, Psi_inv, st.Y))
         st.Mu_means = np.dot(S, (mkernel_update + st.mu_kernel_prior))
         
         #draw them using cholesky decomposition: N(m, Sigma) = m + chol(Sigma).N(0,1)
-        st.Mus = chol_mvn(st.Mu_means, S) 
+        st.Mus = chol_mvn(st.Mu_means, S)
         st.tiled_Mus = np.kron(st.iota_n, st.Mus)
 
         ##effects \beta, in equation 6 of Wheeler & Calder

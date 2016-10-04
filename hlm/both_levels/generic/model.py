@@ -186,6 +186,10 @@ class Base_Generic(Sampler_Mixin):
     
 
     def _iteration(self):
+        """
+        Compute a single iteration of the sampler.
+        This steps through all parameter updates exactly once.
+        """
         st = self.state
     
         ### Sample the Beta conditional posterior

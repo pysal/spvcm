@@ -36,7 +36,16 @@ def south(df=False):
     
     Returns
     -------
-    dictionary
+    dictionary or (dictionary, dataframe), where the dictionary is keyed on:
+    
+    X           : Data from southern counties, columns "GI89", "BLK90", "HR90"
+    Y           : Outcome variate, "DNL90"
+    Z           : upper-level variate, the state average "FH90"
+    W           : queen weights matrix between counties
+    M           : queen matrix between states
+    membership  : membership vector relating counties to their states
+    
+    and the dataframe contains the raw dataset
     """
     import pysal as ps
     import numpy as np
@@ -71,6 +80,19 @@ def south(df=False):
         return d
 
 def baltim(df=False):
+    """
+    Sets up the baltimore house price example
+    
+    Returns
+    --------
+    dictionary or (dictinoary, dataframe), where the dictionary is keyed:
+    
+    X           : Data from baltimore houses, columns "AGE", "LOTSZ", "SQFT"
+    Y           : outcomes, log house price
+    coordinates : the geographic coordinates of house sales
+    
+    dataframe contains the raw data of the baltimore example
+    """
     baltim = ps.pdio.read_files(ps.examples.get_path('baltim.shp'))
     coords = baltim[['X', 'Y']].values
     Y = np.log(baltim.PRICE.values).reshape(-1,1)
@@ -89,7 +111,7 @@ def baltim(df=False):
 
 def splogdet(matrix):
     """
-    compute the log determinant via an appropriate method.
+    compute the log determinant via an appropriate method according to the input.
     """
     redo = False
     if spar.issparse(matrix):
@@ -260,7 +282,6 @@ def ind_covariance(param, W):
     and always returns a dense matrix. Thus, it ignores param entirely.
     """
     return np.eye(W.shape[0])
-
 
 def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
     """
