@@ -1,5 +1,11 @@
 import numpy as np
+import scipy.stats as stats
+import copy
 MAX_SLICE = 1000
+
+#################################
+# STANDALONE SAMPLING FUNCTIONS #
+#################################
 
 def inversion(pdvec, grid):
     """
@@ -67,24 +73,178 @@ def metropolis(state, current, proposal, logp, jump):
         accepted = False
     return outval, accepted
 
-def slicer(state, current, logp, configs):
+def slicer(state, current, logp, width, adapt=10):
     """
-    Implements slice sampling on a bounded log-concave parameter. This allows
-    for no stepping-out to be needed, since the bounds provide the X range and
-    the function provides the Y range. 
+    Implements slice sampling on a bounded log-concave parameter, as according to Neal 2003.
+    
+    Arguments
+    ---------
+    state   :   Hashmap/dict or tuple/list/iterable
+                a collection of attributes/arguments required by the ``
+                that are not `current`, the current value of the parameter
+                being sampled. Is passed as a single argument to `logp`.
+    current :   Float/Int
+                current value of the parameter being sampled.
+                NOTE: This sampler is a univariate slice sampler.
+    logp    :   Callable
+                function that takes (`state`, `current`) and provides the log
+                probability density function to be sampled.
+    width   :   float/int
+                width of the slice to use when sampling.
+    adapt   :   int
+                weight to place on initial slice widths. Computes the moving average of the past `adapt` widths and the current width.
+    
     """
     current_logp = logp(state, current)
-    low, hi = configs.bounds
     n_iterations = 0
     # p. 712 of Neal defines this auxiliary variable on the log scale
     slice_height = current_logp - np.random.exponential()
+    
+    left = current - np.random.uniform(0,width)
+    right = left + width
+    
+    while slice_height < logp(state, left):
+        left -= .1*width
+    while slice_height < logp(state, right):
+        right += .1*width
+    
+    
     while True:
-        candidate = np.random.uniform(low, hi)
+        candidate = np.random.uniform(left, right)
         cand_logp = logp(state, candidate)
         if slice_height <= cand_logp:
-            return candidate, True
+            break
+        if candidate > current:
+            right = candidate
+        elif candidate < current:
+            left = candidate
+        candidate = np.random.uniform(left, right)
         n_iterations += 1
         if n_iterations > MAX_SLICE:
             warn('Slicing is failing to find an effective candidate. '
                  'Using a metropolis update.', stacklevel=2)
             return metropolis(state, current, logp, configs)
+    
+    if adapt > 0:
+        MA = [np.abs(left - right)]
+        MA.extend([width for _ in range(adapt)])
+        width = np.mean(MA)
+    
+    return candidate, True, width
+    
+def hmc(state, current_value, current_momentum, logp, dlogp):
+    raise NotImplementedError
+
+def ars(state, current_value):
+    raise NotImplementedError
+    
+###############################
+# SAMPLING CLASS DECLARATIONS #
+###############################
+
+class AbstractStep(object):
+    """
+    Standin for an abstract step
+    """
+    def __init__(self, varname, model):
+        super(AbstractStep, self).__init__()
+        self.model = model
+        self.varname = varname
+
+    @property
+    def _idempotent(self):
+        return False
+
+    @property
+    def state(self):
+        return self.model.state
+    
+    @property
+    def idx(self):
+        return self.model.steps.index(self)
+    
+    def __call__(self, state):
+        raise NotImplementedError
+    
+    def __draw__(self, state):
+        return self(state)
+    
+class Gibbs(AbstractStep):
+    """
+    Sample directly from a given conditional log posterior distribution using the given kernel.
+    """
+    def __init__(self, varname, model, kernel):
+        super(Gibbs, self).__init__(varname, model)
+        self.kernel = kernel
+    
+    @property
+    def _idempotent(self):
+        return False
+    
+    def __call__(self):
+        return self.kernel(self.model)
+    
+class Metropolis(AbstractStep):
+    """
+    Sample the given Logp using metroplis sampling
+    """
+    def __init__(self, varname, model, logp, jump = 1, proposal = stats.norm, adapt_step=1.01, ar_low = .4, ar_hi = .6, max_tuning = 0, debug=False):
+        super(Metropolis, self).__init__(varname, model)
+        self.jump = jump
+        self.adapt_step = adapt_step if adapt_step >= 1 else 1/adapt_step
+        self.ar_low = ar_low
+        self.ar_hi = ar_hi
+        self.max_tuning = max_tuning
+        self.proposal = proposal
+        self.accepted = 0
+        self.logp = logp
+        self.debug = debug
+        if debug:
+            self._cache = []
+
+    @property
+    def _idempotent(self):
+        return True
+        
+    def __call__(self, state=None):
+        if state is None:
+            state = self.state
+        orig_val = copy.deepcopy(getattr(state, self.varname))
+        new, accepted = metropolis(state, orig_val,
+                                    self.proposal, self.logp, self.jump)
+        self.accepted += int(accepted)
+        self.model.state.update({self.varname:new})
+        if self.model.cycles +1 <= self.max_tuning:
+            acceptance_rate = self.accepted / (self.model.cycles + 1)
+            if acceptance_rate < self.ar_low:
+                self.jump /= self.adapt_step
+            if acceptance_rate > self.ar_hi:
+                self.jump *= self.adapt_step
+        if self.debug:
+            self._cache.append(dict(jump = self.jump,
+                                    current_logp = self.logp(state, orig_val),
+                                    new_logp = self.logp(state, new),
+                                    accepted = accepted))
+        return new
+
+class Slice(AbstractStep):
+    """
+    Sample the given Logp using slice sampling, of Neal (2003).
+    """
+    def __init__(self, varname, model, logp, width, adapt=0):
+        super(Slice, self).__init__(varname, model)
+        self.logp = logp
+        self.width = width
+        self.adapt = adapt
+    
+    @property
+    def _idempotent(self):
+        return True
+    
+    def __call__(self, state=None):
+        if state is None:
+            state = self.state
+        new, _, width = slicer(state, getattr(state, self.varname),
+                               self.logp, self.width, self.adapt)
+        self.width = width
+        return new
