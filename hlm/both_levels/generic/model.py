@@ -57,7 +57,6 @@ class Base_Generic(Sampler_Mixin):
         ## Covariance, computing the starting values
         self.state.Psi_1 = ind_covariance
         self.state.Psi_2 = ind_covariance
-
         
         self.cycles = 0
         
@@ -71,8 +70,8 @@ class Base_Generic(Sampler_Mixin):
     def _setup_priors(self, Betas_cov0 = None, Betas_mean0=None,
                       Sigma2_a0 = .001, Sigma2_b0 = .001,
                       Tau2_a0 = .001, Tau2_b0 = .001,
-                      Log_Lambda0 = None,
-                      Log_Rho0 = None):
+                      Log_Lambda0 = priors.constant,
+                      Log_Rho0 = priors.constant):
         """
         This sets up the data and hyperparameters of the problem.
         If the hyperparameters are to be adjusted, pass them as keyword arguments.
@@ -93,10 +92,6 @@ class Base_Generic(Sampler_Mixin):
         st.Betas_mean0 = Betas_mean0
         st.Tau2_a0 = .001
         st.Tau2_b0 = .001
-        if Log_Lambda0 is None:
-            Log_Lambda0 = priors.constant
-        if Log_Rho0 is None:
-            Log_Rho0 = priors.constant
         st.Log_Lambda0 = Log_Lambda0
         st.Log_Rho0 = Log_Rho0
 
@@ -136,7 +131,8 @@ class Base_Generic(Sampler_Mixin):
 
 
     def _setup_configs(self, Lambda_method = 'met', Lambda_configs = None,
-                             Rho_method = 'met', Rho_configs = None):
+                             Rho_method = 'met', Rho_configs = None,
+                             **uncaught):
         """
         Omnibus function to assign configuration parameters to the correct
         configuration namespace
@@ -145,29 +141,38 @@ class Base_Generic(Sampler_Mixin):
             Lambda_configs = dict()
         if Rho_configs is None:
             Rho_configs = dict()
-        
+            
+        if uncaught != dict():
+            if 'method' in uncaught:
+                Lambda_method = Rho_method = method
+            Lambda_configs = copy.deepcopy(uncaught)
+            Rho_configs = copy.deepcopy(uncaught)
+
         if Lambda_method.lower().startswith('met'):
             method = Metropolis
-            Lambda_configs['jump'] = .5
+            Lambda_configs['jump'] = Lambda_configs.pop('jump', .5)
+            Lambda_configs['max_tuning'] = Lambda_configs.pop('tuning',0)
         elif Lambda_method.lower().startswith('slice'):
             method = Slice
-            Lambda_configs['width'] = .5
+            Lambda_configs['width'] = Lambda_configs.pop('width', .5)
         else:
             raise Exception('Sample method for Lambda not understood:\n{}'
                             .format(Lambda_method))
         if Rho_method.lower().startswith('met'):
             method = Metropolis
-            Rho_configs['jump'] = .5
+            Rho_configs['jump'] = Rho_configs.pop('jump', .5)
+            Rho_configs['max_tuning'] = Rho_configs.pop('tuning',0)
+
         elif Rho_method.lower().startswith('slice'):
             method = Slice
-            Rho_configs['width'] = .5
+            Rho_configs['width'] = Rho_configs.pop('width', .5)
         else:
             raise Exception('Sample method for Rho not understood:\n{}'
                             .format(Rho_method))
 
         self.configs = Hashmap()
-        self.configs.Rho = method('Rho', self, logp_rho, **Rho_configs)
-        self.configs.Lambda = method('Lambda', self, logp_lambda,   **Lambda_configs)
+        self.configs.Rho = method('Rho', logp_rho, **Rho_configs)
+        self.configs.Lambda = method('Lambda', logp_lambda, **Lambda_configs)
 
     def _setup_truncation(self, Rho_min=None, Rho_max = None,
                           Lambda_min = None, Lambda_max = None):
@@ -303,8 +308,6 @@ class Base_Generic(Sampler_Mixin):
         st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
         st.PsiTau2i = la.inv(st.PsiTau2)
         st.PsiLambdai = la.inv(st.PsiLambda)
-        
-        
 
 class Generic(Base_Generic):
     """
@@ -312,26 +315,42 @@ class Generic(Base_Generic):
     """
     def __init__(self, Y, X, W, M, Z=None, Delta=None, membership=None,
                  #data options
-                 transform ='r', n_samples=1000, verbose=False,
-                 **options):
+                 transform ='r', verbose=False,
+                 n_samples=1000, n_jobs=1,
+                 extra_traced_params = None,
+                 priors=None,
+                 starting_values=None,
+                 configs=None,
+                 truncation=None,
+                 center=True,
+                 scale=False):
         W,M = verify.weights(W,M, transform=transform)
         self.M = M
         
-        Y = Y - Y.mean() / Y.std()
-        X = X - X.mean(axis=0) / X.std()
-
+        
         N,_ = X.shape
         J = M.n
         Mmat = M.sparse
         Wmat = W.sparse
-
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
 
-        X = verify.covariates(X)
-
-        self._verbose = verbose
+        
         if Z is not None:
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
-        super(Generic, self).__init__(Y, X, Wmat, Mmat, Delta, n_samples,
-                **options)
+        if center:
+            Y,X = verify.center(Y,X)
+        if scale:
+            Y,X = verify.scale(Y,X)
+            
+        X = verify.covariates(X)
+
+        self._verbose = verbose
+
+        super(Generic, self).__init__(Y, X, Wmat, Mmat, Delta,
+                                      n_samples=n_samples, n_jobs=n_jobs,
+                                      extra_traced_params = extra_traced_params,
+                                      priors=priors,
+                                      starting_values=starting_values,
+                                      configs=configs,
+                                      truncation=truncation)

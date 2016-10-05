@@ -78,6 +78,8 @@ class Sampler_Mixin(object):
         for i, model in enumerate(models):
             if isinstance(model.state, list):
                 models[i].state = copy.deepcopy(self.state[i])
+            if isinstance(model.configs, list):
+                models[i].configs = copy.deepcopy(self.configs[i])
             if self.database is not None:
                 models[i].database = self.database + str(i)
             models[i].trace = Trace(**{k:[] for k in model.trace.varnames})
@@ -99,6 +101,7 @@ class Sampler_Mixin(object):
         self.trace = new_trace
         self.state = [model.state for model in results]
         self.cycles += n_samples[0]
+        self.configs = [model.configs for model in results]
     
     def _fuzz_starting_values(self, state=None):
         st = self.state

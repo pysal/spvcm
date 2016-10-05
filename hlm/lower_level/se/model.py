@@ -28,6 +28,7 @@ class Base_Lower_SE(Base_Generic):
                                             n_samples=0, n_jobs=n_jobs,
                                             extra_traced_params=extra_traced_params,
                                             priors=priors,
+                                            configs=configs,
                                             starting_values=starting_values,
                                             truncation=truncation)
 
@@ -59,12 +60,13 @@ class Lower_SE(Base_Lower_SE):
                  extra_traced_params = None,
                  priors=None,
                  starting_values=None,
-                 truncation=None):
+                 configs=None,
+                 truncation=None,
+                 center=True,
+                 scale=False):
         W,_ = verify.weights(W, None, transform=transform)
         self.W = W
         Wmat = W.sparse
-
-        Y,X = verify.center_and_scale(Y,X)
         
         N,_ = X.shape
         if Delta is not None:
@@ -73,18 +75,22 @@ class Lower_SE(Base_Lower_SE):
             J = len(np.unique(membership))
 
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
-
+        if Z is not None:
+            Z = Delta.dot(Z)
+            X = np.hstack((X,Z))
+        if center:
+            Y,X = verify.center(Y,X)
+        if scale:
+            Y,X = verify.scale(Y,X)
         X = verify.covariates(X)
 
         self._verbose = verbose
-        if Z is not None:
-            Z, = verify.center_and_scale(Z)
-            Z = Delta.dot(Z)
-            X = np.hstack((X,Z))
+
         super(Lower_SE, self).__init__(Y, X, Wmat, Delta,
                                        n_samples=n_samples,
                                        n_jobs = n_jobs,
                                        extra_traced_params=extra_traced_params,
                                        priors=priors,
+                                       configs=configs,
                                        starting_values=starting_values,
                                        truncation=truncation)

@@ -8,11 +8,13 @@ class Base_SMASMA(Base_Generic):
                  n_samples=1000, n_jobs=1,
                  extra_traced_params = None,
                  priors=None,
+                 configs=None,
                  starting_values=None):
         super(Base_SMASMA, self).__init__(Y, X, W, M, Delta,
                                         n_samples=0, n_jobs=n_jobs,
                                         extra_traced_params=extra_traced_params,
                                         priors=priors,
+                                        configs=configs,
                                         starting_values=starting_values)
         st = self.state
         self.state.Psi_1 = sma_covariance
@@ -32,11 +34,12 @@ class SMASMA(Base_SMASMA):
                  n_samples=1000, n_jobs=1,
                  extra_traced_params = None,
                  priors=None,
-                 starting_values=None):
+                 configs=None,
+                 starting_values=None,
+                 center=True,
+                 scale=False):
         W,M = verify.weights(W,M, transform=transform)
         self.M = M
-        
-        Y, X = verify.center_and_scale(Y,X)
 
         N,_ = X.shape
         J = M.n
@@ -45,16 +48,24 @@ class SMASMA(Base_SMASMA):
 
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
 
+
+        if Z is not None:
+            Z = Delta.dot(Z)
+            X = np.hstack((X,Z))
+        if center:
+            Y,X = verify.center(Y,X)
+        if scale:
+            Y,X = verify.scale(Y,X)
+
+
         X = verify.covariates(X)
 
         self._verbose = verbose
-        if Z is not None:
-            Z, = verify.center_and_scale(Z)
-            Z = Delta.dot(Z)
-            X = np.hstack((X,Z))
+
         super(SMASMA, self).__init__(Y, X, Wmat, Mmat, Delta,
                                    n_samples=n_samples,
                                    n_jobs = n_jobs,
                                    extra_traced_params=extra_traced_params,
                                    priors=priors,
+                                   configs=configs,
                                    starting_values=starting_values)

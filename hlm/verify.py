@@ -38,12 +38,17 @@ def covariates(X):
     
     return X
 
-def center_and_scale(*arrays, axis=0):
+def center(*arrays, axis=0):
     """
-    This centers and scales the arrays provided along the axis provided.
+    This centers the arrays provided along the axis provided.
     """
-    return [(array - array.mean(axis=axis)) / array.std(axis=axis)
-            for array in arrays]
+    return [(array - array.mean(axis=axis)) for array in arrays]
+
+def scale(*arrays, axis=0):
+    """
+    This scales covariates by their standard deviation along the axis provided.
+    """
+    return [array/array.std(axis=axis) for array in arrays]
 
 def Delta_members(Delta, membership, N, J):
     """

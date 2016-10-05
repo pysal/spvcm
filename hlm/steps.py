@@ -146,22 +146,13 @@ class AbstractStep(object):
     """
     Standin for an abstract step
     """
-    def __init__(self, varname, model):
+    def __init__(self, varname):
         super(AbstractStep, self).__init__()
-        self.model = model
         self.varname = varname
 
     @property
     def _idempotent(self):
         return False
-
-    @property
-    def state(self):
-        return self.model.state
-    
-    @property
-    def idx(self):
-        return self.model.steps.index(self)
     
     def __call__(self, state):
         raise NotImplementedError
@@ -173,23 +164,23 @@ class Gibbs(AbstractStep):
     """
     Sample directly from a given conditional log posterior distribution using the given kernel.
     """
-    def __init__(self, varname, model, kernel):
-        super(Gibbs, self).__init__(varname, model)
+    def __init__(self, varname, kernel):
+        super(Gibbs, self).__init__(varname)
         self.kernel = kernel
     
     @property
     def _idempotent(self):
         return False
     
-    def __call__(self):
-        return self.kernel(self.model)
+    def __call__(self, state):
+        return self.kernel(state)
     
 class Metropolis(AbstractStep):
     """
     Sample the given Logp using metroplis sampling
     """
-    def __init__(self, varname, model, logp, jump = 1, proposal = stats.norm, adapt_step=1.01, ar_low = .4, ar_hi = .6, max_tuning = 0, debug=False):
-        super(Metropolis, self).__init__(varname, model)
+    def __init__(self, varname, logp, jump = 1, proposal = stats.norm, adapt_step=1.01, ar_low = .4, ar_hi = .6, max_tuning = 0, debug=False):
+        super(Metropolis, self).__init__(varname)
         self.jump = jump
         self.adapt_step = adapt_step if adapt_step >= 1 else 1/adapt_step
         self.ar_low = ar_low
@@ -197,6 +188,7 @@ class Metropolis(AbstractStep):
         self.max_tuning = max_tuning
         self.proposal = proposal
         self.accepted = 0
+        self.cycles = 0
         self.logp = logp
         self.debug = debug
         if debug:
@@ -206,16 +198,15 @@ class Metropolis(AbstractStep):
     def _idempotent(self):
         return True
         
-    def __call__(self, state=None):
-        if state is None:
-            state = self.state
+    def __call__(self, state):
         orig_val = copy.deepcopy(getattr(state, self.varname))
         new, accepted = metropolis(state, orig_val,
                                     self.proposal, self.logp, self.jump)
         self.accepted += int(accepted)
-        self.model.state.update({self.varname:new})
-        if self.model.cycles +1 <= self.max_tuning:
-            acceptance_rate = self.accepted / (self.model.cycles + 1)
+        self.cycles += 1
+        self.is_tuning = self.cycles <= self.max_tuning
+        if self.is_tuning:
+            acceptance_rate = self.accepted / self.cycles
             if acceptance_rate < self.ar_low:
                 self.jump /= self.adapt_step
             if acceptance_rate > self.ar_hi:
@@ -231,8 +222,8 @@ class Slice(AbstractStep):
     """
     Sample the given Logp using slice sampling, of Neal (2003).
     """
-    def __init__(self, varname, model, logp, width, adapt=0):
-        super(Slice, self).__init__(varname, model)
+    def __init__(self, varname, logp, width, adapt=0):
+        super(Slice, self).__init__(varname)
         self.logp = logp
         self.width = width
         self.adapt = adapt
@@ -241,9 +232,7 @@ class Slice(AbstractStep):
     def _idempotent(self):
         return True
     
-    def __call__(self, state=None):
-        if state is None:
-            state = self.state
+    def __call__(self, state):
         new, _, width = slicer(state, getattr(state, self.varname),
                                self.logp, self.width, self.adapt)
         self.width = width

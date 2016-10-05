@@ -31,6 +31,7 @@ class Base_Upper_SMA(Base_Generic):
                                             n_samples=0, n_jobs=n_jobs,
                                             extra_traced_params=extra_traced_params,
                                             priors=priors,
+                                            configs=configs,
                                             starting_values=starting_values,
                                             truncation=truncation)
         st = self.state
@@ -125,13 +126,14 @@ class Upper_SMA(Base_Upper_SMA):
                  n_samples=1000, n_jobs=1,
                  extra_traced_params = None,
                  priors=None,
+                 configs=None,
                  starting_values=None,
-                 truncation=None):
+                 truncation=None,
+                 center=True,
+                 scale=False):
         _, M = verify.weights(None, M, transform=transform)
         self.M = M
         Mmat = M.sparse
-
-        Y,X = verify.center_and_scale(Y,X)
 
         N,_ = X.shape
         if Delta is not None:
@@ -140,18 +142,23 @@ class Upper_SMA(Base_Upper_SMA):
             J = len(np.unique(membership))
 
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
+        if Z is not None:
+            Z = Delta.dot(Z)
+            X = np.hstack((X,Z))
+        if center:
+            Y,X = verify.center(Y,X)
+        if scale:
+            Y,X = verify.scale(Y,X)
 
         X = verify.covariates(X)
 
         self._verbose = verbose
-        if Z is not None:
-            Z, = verify.center_and_scale(Z)
-            Z = Delta.dot(Z)
-            X = np.hstack((X,Z))
+
         super(Upper_SMA, self).__init__(Y, X, Mmat, Delta,
                                        n_samples=n_samples,
                                        n_jobs = n_jobs,
                                        extra_traced_params=extra_traced_params,
                                        priors=priors,
+                                       configs=configs,
                                        starting_values=starting_values,
                                        truncation=truncation)

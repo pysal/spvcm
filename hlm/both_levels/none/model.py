@@ -186,11 +186,11 @@ class MVCM(Base_MVCM):
                  verbose=False,
                  extra_traced_params = None,
                  priors=None,
-                 starting_values=None
+                 starting_values=None,
+                 center=True,
+                 scale=False
                  ):
-                     
-        Y, X = verify.center_and_scale(Y, X)
-
+        
         N, _ = X.shape
         if Delta is not None:
             _,J = Delta.shape
@@ -199,13 +199,19 @@ class MVCM(Base_MVCM):
         else:
             raise UserWarning("No Delta matrix nor membership classification provided. Refusing to arbitrarily assign units to upper-level regions.")
         Delta, membership = verify.Delta_members(Delta, membership, N, J)
+
+        if Z is not None:
+            Z = Delta.dot(Z)
+            X = np.hstack((X,Z))
+        if center:
+            Y,X = verify.center(Y,X)
+        if scale:
+            Y,X = verify.scale(Y,X)
+
+
         X = verify.covariates(X)
 
         self._verbose = verbose
-        if Z is not None:
-            Z, = verify.center_and_scale(Z)
-            Z = Delta.dot(Z)
-            X = np.hstack((X,Z))
         super(MVCM, self).__init__(Y, X, Delta, n_samples=n_samples,
                                    n_jobs=n_jobs,
                                    extra_traced_params = extra_traced_params,

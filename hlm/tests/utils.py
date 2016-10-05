@@ -29,6 +29,10 @@ class Model_Mixin(object):
         #priors, initial values, etc.
         raise NotImplementedError
     
+    @ut.skip
+    def test_covariance_assignment(self):
+        raise NotImplementedError
+    
 def run_with_seed(cls, env=utils.south(), seed=TEST_SEED, fprefix = ''):
     fname = str(cls).strip("'<>'").split('.')[-1].lower()
     try:
