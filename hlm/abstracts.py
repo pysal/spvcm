@@ -74,12 +74,16 @@ class Sampler_Mixin(object):
                 self.trace[param] = [getattr(self.trace, param)[-1]]
     
     def _parallel_sample(self, n_samples, n_jobs):
+        """
+        Run n_jobs parallel samples of a given model
+        """
         models = [copy.deepcopy(self) for _ in range(n_jobs)]
         for i, model in enumerate(models):
             if isinstance(model.state, list):
                 models[i].state = copy.deepcopy(self.state[i])
-            if isinstance(model.configs, list):
-                models[i].configs = copy.deepcopy(self.configs[i])
+            if hasattr(model, 'configs'):
+                if isinstance(model.configs, list):
+                    models[i].configs = copy.deepcopy(self.configs[i])
             if self.database is not None:
                 models[i].database = self.database + str(i)
             models[i].trace = Trace(**{k:[] for k in model.trace.varnames})
