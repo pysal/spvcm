@@ -10,7 +10,7 @@ from .sample import sample_phi
 from ...abstracts import Sampler_Mixin, Trace, Hashmap
 from ...utils import chol_mvn
 
-class SVCP(Sampler_Mixin):
+class SVC(Sampler_Mixin):
     """
     A class to initialize a spatially-varying coefficient model
 

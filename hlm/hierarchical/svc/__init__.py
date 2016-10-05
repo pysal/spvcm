@@ -1,1 +1,1 @@
-from .model import SVCP
+from .model import SVC

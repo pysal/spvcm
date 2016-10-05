@@ -1,4 +1,4 @@
-from hlm.hierarchical.svcp import SVCP
+from hlm.hierarchical.svc import SVC
 from hlm.abstracts import Trace
 from hlm._constants import TEST_SEED, RTOL, ATOL
 from hlm.utils import no_op
@@ -11,7 +11,7 @@ import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-class Test_SVCP(ut.TestCase):
+class Test_SVC(ut.TestCase):
     def setUp(self):
         
         self.answer = Trace.from_csv(FULL_PATH + '/data/svcp.csv')
@@ -27,7 +27,7 @@ class Test_SVCP(ut.TestCase):
         self.test_trace = no_op
     
     def test_draw(self):
-        instance = SVCP(**self.inputs, n_samples=0)
+        instance = SVC(**self.inputs, n_samples=0)
         np.random.seed(TEST_SEED)
         instance.draw()
         instance.trace._assert_allclose(self.answer,

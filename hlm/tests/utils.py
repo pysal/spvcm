@@ -1,7 +1,6 @@
 import unittest as ut
 from hlm import utils
 from hlm._constants import RTOL, ATOL, TEST_SEED, CLASSTYPES
-from hlm.hierarchical.svcp.tests.test_svcp import Test_SVCP
 from warnings import warn
 import numpy as np
 import copy
