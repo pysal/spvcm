@@ -72,7 +72,6 @@ def gamma(state):
     Sgn = np.linalg.inv(Sgni)
     st.Gammas = chol_mvn(Sgn.dot(gn), Sgn)
     st.ZGammas = st.Z.dot(st.Gammas)
-    
     return st.Gammas
                            
 def all_j(state):
@@ -131,36 +130,6 @@ def phi_j(state, idx):
             this_cfg.tuning = False
     return new_val
 
-def logp_phi_j(state, val, j=None):
-    """
-    The logp for the current phi parameter, where `j` is
-    either stored in state or passed as an argument.
-    
-    modifies nothing inplace.
-    """
-    if j is None:
-        idx = state.j
-    else:
-        idx = j
-    if val < 0:
-        return -np.inf
-    st = state
-    Hj = state.correlation_function(val, state.pwds)
-    Hji = np.linalg.inv(Hj)
-    Zeta_j = st.Zeta_list[idx]
-    Sigma2_j = st.Sigma2_list[idx]
-    Phi_j = st.Phi_list[idx]
-    c0_j = st.c0_list[idx]
-    d0_j = st.d0_list[idx]
-    
-    logdet = -.5*np.multiply(*np.linalg.slogdet(Hj))
-    varterm = -(st.n / 2) * np.log(Sigma2_j)
-    phiterm = (c0_j - 1) * np.log(Phi_j)
-    norm_kern = (-1/(2*Sigma2_j)
-                 * np.linalg.multi_dot((Zeta_j.T, Hji, Zeta_j)) )
-    gamma_kern = - Phi_j * d0_j
-    return logdet + varterm + norm_kern + gamma_kern
-
 def sigma_j(state, idx):
     """
     The sample step for the `idx`th sigma2_j parameter.
@@ -180,3 +149,34 @@ def sigma_j(state, idx):
     bjn = Zeta_j.T.dot(Hji).dot(Zeta_j) / 2 + b0_j
     new_sigma = stats.invgamma.rvs(st.an_list[idx], scale=bjn)
     return new_sigma
+
+def logp_phi_j(state, val, j=None):
+    """
+    The logp for the current phi parameter, where `j` is
+    either stored in state or passed as an argument.
+    
+    modifies nothing inplace.
+    """
+    if j is None:
+        idx = state.j
+    else:
+        idx = j
+    if val < 0:
+        return -np.inf
+    st = state
+    Hj = state.correlation_function(val, state.pwds)
+    Hji = np.linalg.inv(Hj)
+    Zeta_j = st.Zeta_list[idx]
+    Sigma2_j = st.Sigma2_list[idx]
+    Phi_j = st.Phi_list[idx]
+    c0_j = st.Phi_shape0_list[idx]
+    d0_j = st.Phi_rate0_list[idx]
+    
+    logdet = -.5*np.multiply(*np.linalg.slogdet(Hj))
+    varterm = -(st.n / 2) * np.log(Sigma2_j)
+    phiterm = (c0_j - 1) * np.log(Phi_j)
+    norm_kern = (-1/(2*Sigma2_j)
+                 * np.linalg.multi_dot((Zeta_j.T, Hji, Zeta_j)) )
+    gamma_kern = - Phi_j * d0_j
+    return logdet + varterm + norm_kern + gamma_kern
+
