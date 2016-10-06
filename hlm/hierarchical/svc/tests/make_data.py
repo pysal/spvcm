@@ -1,4 +1,4 @@
-from hlm.hierarchical.svcp import SVCP
+from hlm.hierarchical.svc import SVC
 from hlm._constants import TEST_SEED
 from hlm.utils import baltim
 import pysal as ps
@@ -7,14 +7,11 @@ import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-def make_data():
+def build():
     inputs = baltim() 
-    inputs['n_samples'] = 0
-    inputs['phi_jump'] = .5
-    model = SVCP(**inputs)
+    inputs.update(dict(configs=dict(jump=.5)))
+    model = SVC(**inputs, n_samples=0)
     np.random.seed(TEST_SEED)
     model.draw()
-    model.trace.to_csv(FULL_PATH + '/data/svcp.csv')
+    model.trace.to_csv(FULL_PATH + '/data/svc.csv')
 
-if __name__ == '__main__':
-    make_data()

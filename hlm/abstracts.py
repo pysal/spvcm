@@ -90,10 +90,12 @@ class Sampler_Mixin(object):
             if self.cycles == 0:
                 models[i]._fuzz_starting_values()
         n_samples = [n_samples] * n_jobs
+        _start = dt.now()
         seed = np.random.randint(0,10000, size=n_jobs).tolist()
         P = mp.Pool(n_jobs)
         results = P.map(_reflexive_sample, zip(models, n_samples, seed))
         P.close()
+        _stop = dt.now()
         if self.cycles > 0:
             new_traces = []
             for i, model in enumerate(results):
@@ -106,7 +108,11 @@ class Sampler_Mixin(object):
         self.state = [model.state for model in results]
         self.cycles += n_samples[0]
         self.configs = [model.configs for model in results]
-    
+        if hasattr(self, 'total_sample_time'):
+            self.total_sample_time += _stop - _start
+        else:
+            self.total_sample_time = _stop - _start
+
     def _fuzz_starting_values(self, state=None):
         st = self.state
         if hasattr(st, 'Betas'):
@@ -121,7 +127,7 @@ class Sampler_Mixin(object):
             self.state.Lambda += np.random.uniform(-.5,.5)
         if hasattr(st, 'Rho'):
             self.state.Rho += np.random.uniform(-.5,.5)
-    
+
     def _finalize(self, **args):
         raise NotImplementedError
     
@@ -238,15 +244,40 @@ class Trace(object):
         self._varnames = list(self.chains[0].keys())
             
 
-    def _validate_schema(self):
-        tracked_in_each = [set(chain.keys()) for chain in self.chains]
+    def _validate_schema(self, chains=None):
+        if chains is None:
+            chains = self.chains
+        tracked_in_each = [set(chain.keys()) for chain in chains]
         same_schema = [names == tracked_in_each[0] for names in tracked_in_each]
         try:
             assert all(same_schema)
         except AssertionError:
-            bad_chains = [i for i in range(self.n_chains) if same_schema[i]]
+            bad_chains = [i for i in range(len(chains)) if same_schema[i]]
             KeyError('The parameters tracked in each chain are not the same!'
                      '\nChains {} do not have the same parameters as chain 1!'.format(bad_chains))
+
+    def add_chain(self, *chains, validate=True):
+        """
+        Add chains to a trace object
+        
+        Parameters
+        ----------
+        chains  :   Hashmap
+                    
+        
+        """
+        new_chains = [self.chains]
+        for chain in chains:
+            if isinstance(chain, Hashmap):
+                new_chains.append(chain)
+            elif isinstance(chain, Trace):
+                new_chains.extend(chain.chains)
+            else:
+                new_chains.extend(_maybe_hashmap(chain))
+        if validate:
+            self._validate_schema(chains=new_chains)
+        self.chains = new_chains
+
 
     @property
     def n_chains(self):
@@ -551,6 +582,28 @@ class Trace(object):
     
     def plot(trace, burn=0, thin=None, varnames=None,
              kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
+        """
+        Make a trace plot paired with a distributional plot.
+    
+        Arguments
+        -----------
+        trace   :   namespace
+                    a namespace whose variables are contained in varnames
+        burn    :   int
+                    the number of iterations to discard from the front of the trace
+        thin    :   int
+                    the number of iterations to discard between iterations
+        varnames :  str or list
+                    name or list of names to plot.
+        kde_kwargs : dictionary
+                     dictionary of aesthetic arguments for the kde plot
+        trace_kwargs : dictionary
+                       dictinoary of aesthetic arguments for the traceplot
+    
+        Returns
+        -------
+        figure, axis tuple, where axis is (len(varnames), 2)
+        """
         f, ax = plot_trace(model=None, trace=trace, burn=burn,
                            thin=thin, varnames=varnames,
                       kde_kwargs=kde_kwargs, trace_kwargs=trace_kwargs,

@@ -1,7 +1,7 @@
 from __future__ import division
 import scipy.stats as stats
 import numpy as np
-from warnings import warn 
+from warnings import warn
 from ...steps import metropolis
 
 def logp_phi(state, phi):
@@ -22,11 +22,11 @@ def logp_phi(state, phi):
     logdetT *= sgnT
     if any([x not in (-1,1) for x in [sgnH, sgnT]]):
         warn('Catastrophic loss of precision in np.linalg.slogdet of np.kron(st.H, st.T)')
-    logdet = logdetH * st.p + logdetT * st.n
+    logdet = logdetH * st.p + logdetT * st.N
     Bmu = st.Betas - st.tiled_Mus
     kronHT_inv = st.kronHiTi #since inv of kronecker is kronecker of invs
     normal_kernel = np.dot(Bmu.T, np.dot(kronHT_inv, Bmu)) * -.5
-    gamma_kernel = np.log(phi)*(st.phi_shape0 - 1) + -1*st.phi_rate0*phi
+    gamma_kernel = np.log(phi)*(st.Phi_shape0 - 1) + -1*st.Phi_rate0*phi
     return -.5*logdet + normal_kernel + gamma_kernel
     
 def sample_phi(SVCP):

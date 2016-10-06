@@ -40,7 +40,8 @@ class Test_Generic(ut.TestCase, Model_Mixin):
         local_input = copy.deepcopy(self.inputs)
         local_input['W_'] = local_input['M']
         local_input['M'] = local_input['W']
-        local_input['W'] = local_input['W_']
+        local_input['W'] = copy.deepcopy(local_input['W_'])
+        del local_input['W_']
         try:
             self.cls(**local_input, n_samples=0)
         except (UserWarning, AssertionError):
