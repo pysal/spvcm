@@ -9,18 +9,22 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
 
     Arguments
     -----------
-    trace   :   namespace
-                a namespace whose variables are contained in varnames
+    model   :   Model object
+                a model with a trace attribute
     burn    :   int
                 the number of iterations to discard from the front of the trace
     thin    :   int
                 the number of iterations to discard between iterations
     varnames :  str or list
                 name or list of names to plot.
+    trace   :   namespace
+                a namespace whose variables are contained in varnames
     kde_kwargs : dictionary
                  dictionary of aesthetic arguments for the kde plot
     trace_kwargs : dictionary
                    dictinoary of aesthetic arguments for the traceplot
+    figure_kwargs: dictionary
+                    a dictionary of arguments for the plot creator
 
     Returns
     -------
