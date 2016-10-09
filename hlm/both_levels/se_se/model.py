@@ -51,9 +51,9 @@ class SESE(Base_SESE):
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
         if center:
-            Y,X = verify.center(Y,X)
+            X = verify.center(X)
         if scale:
-            Y,X = verify.scale(Y,X)
+            X = verify.scale(X)
 
 
         X = verify.covariates(X)
