@@ -8,6 +8,7 @@ import sqlite3 as sql
 from .sqlite import head_to_sql, start_sql
 from .plotting.traces import plot_trace
 from .utils import no_op
+from .diagnostics import summarize
 from collections import OrderedDict
 import pandas as pd
 import os
@@ -242,7 +243,6 @@ class Trace(object):
             for varname in varnames:
                 del self.chains[i][varname]
         self._varnames = list(self.chains[0].keys())
-            
 
     def _validate_schema(self, chains=None):
         if chains is None:
@@ -278,11 +278,109 @@ class Trace(object):
             self._validate_schema(chains=new_chains)
         self.chains = new_chains
 
+    def map(self, func, **func_args):
+        """
+        Map a function over all parameters in a chain. 
+        Multivariate parameters are reduced to sequences of univariate parameters.
 
+        Usage
+        -------
+        Intended when full-trace statistics are required. Most often,
+        the trace should be sliced directly. For example, to get the mean value of a
+        parameter over the last -1000 iterations with a thinning of 2:
+
+        trace[0, 'Betas', -1000::2].mean(axis=0)
+
+        but, to average of the parameter over all recorded chains:
+
+        trace['Betas', -1000::2].mean(axis=0).mean(axis=0)
+
+        since the first reduction provides an array where rows 
+        are iterations and columns are parameters. 
+        
+        trace.map(np.mean) yields the mean of each parameter within each chain, and is
+        provided to make within-chain reductions easier. 
+
+        Arguments
+        ---------
+        func        :   callable
+                        a function that returns a result when provided a flat vector.
+        func_args   :   dictionary/keyword arguments
+                        arguments needed to be passed to the reduction
+        """
+        all_stats = []
+        for i, chain in enumerate(self.chains):
+            these_stats=dict()
+            for var in self.varnames:
+                data = np.squeeze(self[i,var])
+                if data.ndim > 1:
+                    n,p = data.shape[0:2]
+                    rest = data.shape[2:0]
+                    if len(rest) == 0:
+                        data = data.T
+                    elif len(rest) == 1:
+                        data = data.reshape(n,p*rest[0]).T
+                    else:
+                        raise Exception('Parameter "{}" shape not understood.'                  ' Please extract, shape it, and pass '
+                                        ' as its own chain. '.format(var))
+                else:
+                    data = data.reshape(1,-1)
+                stats = [func(datum, **func_args) for datum in data]
+                if len(stats) == 1:
+                    stats = stats[0]
+                these_stats.update({var:stats})
+            all_stats.append(these_stats)
+        return all_stats
+            
     @property
     def n_chains(self):
         return len(self.chains)
 
+    @property
+    def n_iters(self):
+        lengths = [len(chain[self.varnames[0]]) for chain in self.chains]
+        if len(lens) == 1:
+            return lengths[0]
+        else:
+            return lengths
+    
+    def plot(self, burn=0, thin=None, varnames=None,
+             kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
+        """
+        Make a trace plot paired with a distributional plot.
+    
+        Arguments
+        -----------
+        trace   :   namespace
+                    a namespace whose variables are contained in varnames
+        burn    :   int
+                    the number of iterations to discard from the front of the trace
+        thin    :   int
+                    the number of iterations to discard between iterations
+        varnames :  str or list
+                    name or list of names to plot.
+        kde_kwargs : dictionary
+                     dictionary of aesthetic arguments for the kde plot
+        trace_kwargs : dictionary
+                       dictinoary of aesthetic arguments for the traceplot
+    
+        Returns
+        -------
+        figure, axis tuple, where axis is (len(varnames), 2)
+        """
+        f, ax = plot_trace(model=None, trace=self, burn=burn,
+                           thin=thin, varnames=varnames,
+                      kde_kwargs=kde_kwargs, trace_kwargs=trace_kwargs,
+                      figure_kwargs=figure_kwargs)
+        return f,ax
+   
+    def summarize(self, level=0):
+        return summarize(self, level=level)
+
+    @property
+    def summary(self):
+        return summary(self)
+    
     def __getitem__(self, key):
         """
         Getting an item from a trace can be done using at most three indices, where:
@@ -412,6 +510,10 @@ class Trace(object):
             result = result[0]
         return result
     
+    ##############
+    # Comparison #
+    ##############
+
     def __eq__(self, other):
         if not isinstance(other, type(self)):
             return False
@@ -450,6 +552,10 @@ class Trace(object):
                     B = ch2[k]
                 np.testing.assert_allclose(A,B,**allclose_kw)
                     
+
+    ###################
+    # IO and Exchange #
+    ###################
     
     def to_df(self):
         """
@@ -579,37 +685,8 @@ class Trace(object):
             df = pd.read_csv(filename, **pandas_kwargs)
             return cls.from_df(df, varnames=varnames,
                                combine_suffix=combine_suffix)
-    
-    def plot(trace, burn=0, thin=None, varnames=None,
-             kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
-        """
-        Make a trace plot paired with a distributional plot.
-    
-        Arguments
-        -----------
-        trace   :   namespace
-                    a namespace whose variables are contained in varnames
-        burn    :   int
-                    the number of iterations to discard from the front of the trace
-        thin    :   int
-                    the number of iterations to discard between iterations
-        varnames :  str or list
-                    name or list of names to plot.
-        kde_kwargs : dictionary
-                     dictionary of aesthetic arguments for the kde plot
-        trace_kwargs : dictionary
-                       dictinoary of aesthetic arguments for the traceplot
-    
-        Returns
-        -------
-        figure, axis tuple, where axis is (len(varnames), 2)
-        """
-        f, ax = plot_trace(model=None, trace=trace, burn=burn,
-                           thin=thin, varnames=varnames,
-                      kde_kwargs=kde_kwargs, trace_kwargs=trace_kwargs,
-                      figure_kwargs=figure_kwargs)
-        return f,ax
 
+            
 ####################
 # HELPER FUNCTIONS #
 ####################

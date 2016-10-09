@@ -1,6 +1,21 @@
 import numpy as np
+import pandas as pd
+import warnings
 from collections import OrderedDict
 import copy
+
+try:
+    from rpy2 .rinterface import RRuntimeError
+    from rpy2.robjects.packages import importr
+    _coda = importr('coda')
+    HAS_CODA = True
+    HAS_RPY2 = True
+except ImportError:
+    HAS_CODA =  False
+    HAS_RPY2 = False
+except RRuntimeError:
+    HAS_CODA = False
+    HAS_RPY2 = True
 
 
 #####################################
@@ -131,6 +146,9 @@ def psrf(model = None, trace=None, chain=None, autoburnin=True,
         out.update({param:_psrf[method](this_chain)})
     return out
 
+######################
+# Geweke Diagnostics #
+######################
 
 def geweke(model = None, trace=None, chain=None,
            drop_frac=.1, hold_frac=.5, n_bins=50,
@@ -194,6 +212,14 @@ def geweke(model = None, trace=None, chain=None,
             all_stats[i].update(results)
     return all_stats
 
+def _geweke_map(model = None, trace=None, chain=None,
+           drop_frac=.1, hold_frac=.5, n_bins=50,
+           varnames=None, variance_method='ar', **ar_kw):
+    trace = _resolve_to_trace(model, trace, chain, varnames)
+    stats = trace.map(_geweke_vector, drop=drop_frac, hold=hold_frac, n_bins=n_bins,
+                      varfunc=_geweke_variance[variance_method])
+    return stats
+
 def _geweke_vector(data, drop, hold, n_bins, **kw):
     """
     Compute a vector of geweke statistics over the `data` vector. This proceeds like the `R` `CODA` package's geweke statistic. The first half of the data vector is split into `n_bins` segments. Then, the Geweke statistic is repeatedly computed over subsets of the data where a bin is dropped each step. This results in `n_bins` statistics.
@@ -232,6 +258,186 @@ def _geweke_statistic(data, drop, hold, varfunc=None):
     return ((drop_mean - hold_mean) / np.sqrt((drop_var / n_drop)
                                             +(hold_var / n_hold)))
 
+##################
+# Effective Size #
+##################
+
+def effective_size(model=None, trace=None, chain=None, varnames=None,
+                    use_R=False):
+    """
+    Compute the effective size of a trace, accounting for serial autocorrelation. 
+    This statistic is:
+
+    N * var(x)/spectral0(x)
+
+    where spectral0(x) is the spectral density of x at lag 0, an
+    autocorrelation-adjusted estimate of the sequence variance. 
+
+    NOTE: the backend argument defaults to estimating the effective_size in
+    python. But, the statsmodels.tsa.AR required for the spectral density
+    estimate is *slow* for large chains. If you have a properly configured R
+    installation with the python package `rpy2` and the R package `coda` installed,
+    you can opt to pass through to CODA by passing `use_R=True`.
+    
+    Arguments 
+    ----------
+    Arguments
+    ----------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the 
+                statistic. 
+    use_R   :   bool (default: False)
+                option to drop the computation of the effective size down to R's CODA 
+                package. Requires: rpy2, working R installation, CODA R package
+    """
+    trace = _resolve_to_trace(model, trace, chain, varnames)
+    stats = trace.map(_effective_size, use_R=use_R)
+    return stats if len(stats) > 1 else stats[0]
+
+def _effective_size(x, use_R=False):
+    """
+    Compute the effective size from a given flat array
+
+    Arguments
+    -----------
+    x       :   np.ndarray
+                flat vector of values to compute the effective sample size
+
+    use_R   :   bool
+                option to use rpy2+CODA or pure python implementation. If False, 
+                the effective size computation may be unbearably slow on large data,
+                due to slow AR fitting in statsmodels.
+    """
+    if use_R:
+        if HAS_RPY2 and HAS_CODA:
+            return _coda.effectiveSize(x)[0]
+        elif HAS_RPY2 and not HAS_CODA:
+            raise ImportError("No module named 'coda' in R.")
+        else:
+            raise ImportError("No module named 'rpy2'")
+    else:
+        spec = _spectrum0_ar(x)
+        if spec == 0:
+            return 0
+        loss_factor = np.var(x, ddof=1)/spec
+        return len(x) * loss_factor
+
+#############################
+# Highest Posterior Density #
+#############################
+
+def hpd_interval(model = None,  trace = None,  chain = None,  varnames = None,  p=.95):
+    trace = _resolve_to_trace(model, trace, chain, varnames)
+    stats = trace.map(_hpd_interval, p=p)
+    return stats if len(stats) > 1 else stats[0]
+    
+def _hpd_interval(data, p=.95):
+    data = np.sort(data)
+    N = len(data)
+    N_in = int(np.ceil(N*p))
+    head = np.arange(0,N-N_in)
+    tail = head+N_in
+    pivot = np.argmin(data[tail] - data[head])
+    return data[pivot], data[pivot+N_in]
+
+#############
+# Summarize #
+#############
+
+def summarize(trace, level=0):
+    """
+    Summarize a trace object, providing its mean, median, HPD, 
+    standard deviation, and effective size.
+
+    Arguments
+    ---------
+    trace   :   trace
+                trace object on which to compute the summary
+    level   :   int 
+                ordered in terms of how much information reduction occurs. a level 0 summary 
+                provides the output for each chain. A level 1 summary provides output 
+                grouped over all chains. 
+    """
+    dfs = trace.to_df()
+    if isinstance(dfs, list):
+        multi_index = ['Chain_{}'.format(i) for i in range(len(dfs))]
+        df = pd.concat(dfs, axis=1, keys=multi_index)
+    else:
+        df = pd.concat((dfs,), axis=1, keys=['Chain_0'])
+    df = df.describe().T[['count', 'mean', '50%', 'std']]
+    HPDs = hpd_interval(trace=trace, p=.95)
+    if HAS_CODA:
+        ESS = effective_size(trace=trace, use_R=True)
+    else:
+        warn('Computing effective sample size may take a while due to statsmodels.tsa.AR.'
+                , stacklevel=2)
+        ESS = effective_size(trace=trace, use_R=False)
+    flattened_HPDs = []
+    flattened_ESSs = []
+    if isinstance(HPDs, dict):
+        HPDs = [HPDs]
+    if isinstance(ESS, dict):
+        ESS = [ESS]
+    for i_chain, chain in enumerate(HPDs):
+        this_HPD = dict() 
+        this_ESS = dict()
+        for key,val in chain.items():
+            if isinstance(val, list):
+                for i, hpd_tuple in enumerate(val):
+                    name = '{}_{}'.format(key, i)
+                    this_HPD.update({name:hpd_tuple})
+                    this_ESS.update({name:ESS[i_chain][key][i]})
+            else:
+                this_HPD.update({key:val})
+                this_ESS.update({key:ESS[i_chain][key]})
+        flattened_HPDs.append(this_HPD)
+        flattened_ESSs.append(this_ESS)
+    #return df, flattened_HPDs, flattened_ESSs
+    df['HPD_low'] = None
+    df['HPD_high'] = None
+    df['N_effective'] = None
+    for i, this_chain_HPD in enumerate(flattened_HPDs):
+        this_chain_ESS = flattened_ESSs[i]
+        outer_key = 'Chain_{}'.format(i)
+        keys = [(outer_key, inner_key) for inner_key in this_chain_HPD.keys()]
+        lows, highs = zip(*[this_chain_HPD[key[-1]] for key in keys])
+        n_eff = [this_chain_ESS[key[-1]] for key in keys]
+        df.ix[keys, 'HPD_low'] = lows
+        df.ix[keys, 'HPD_high'] = highs
+        df.ix[keys, 'N_effective'] = n_eff
+    df['median'] = df['50%']
+    df['N_iters'] = df['count'].apply(int)
+    df['N_effective'] = df['N_effective'].apply(round)
+    df.drop('count', axis=1, inplace=True)
+    df['AR_loss'] = (df['N_iters'] - df['N_effective'])/df['N_iters']
+    df = df[['mean', 'HPD_low', 'median', 'HPD_high', 'std', 'N_iters', 'N_effective', 'AR_loss']]
+    if level>0:
+        df = df.unstack()
+        grand_mean = df['mean'].mean(axis=0)
+        lowest_HPD = df['HPD_low'].min(axis=0)
+        grand_median = df['median'].median(axis=0)
+        highest_HPD = df['HPD_high'].max(axis=0)
+        std = df['std'].mean(axis=0)
+        neff = df['N_effective'].sum(axis=0)
+        N = df['N_iters'].sum(axis=0)
+        df = pd.concat([grand_mean, lowest_HPD, grand_median, 
+                        highest_HPD, std, N, neff], axis=1)
+        df.columns = ['grand_mean', 'min_HPD', 'grand_median', 'max_HPD', 'std', 
+                      'sum(N_iters)', 'sum(N_effective)']
+    return df
+
+#############
+# Utilities #
+#############
+
 def _resolve_to_trace(model, trace, chain, varnames):
     """
     Resolve a collection of information down to a trace. This reduces the
@@ -252,7 +458,7 @@ def _resolve_to_trace(model, trace, chain, varnames):
         varnames = [varnames]
     if trace is not None:
         if varnames is not None:
-            return trace.drop([var for var in trace.varnames
+            return trace.drop(*[var for var in trace.varnames
                                if var not in varnames], inplace=False)
         else:
             return copy.deepcopy(trace)
@@ -283,7 +489,8 @@ def _naive_var(data, *_, **__):
 def _spectrum0_ar(data, spec_kw=dict(), fit_kw=dict()):
     """
     The corrected spectral density estimate of time series variance,
-    as applied in CODA
+    as applied in CODA. Written to replicate R, so defaults change. 
+    Note: this is very slow when there is a lot of data. 
     """
     try:
         from statsmodels.api import tsa
@@ -292,11 +499,13 @@ def _spectrum0_ar(data, spec_kw=dict(), fit_kw=dict()):
                            ' spectral density estimate of the variance.')
     if fit_kw == dict():
         fit_kw['ic']='aic'
+        N = len(data) 
+        # R uses the smaller of N-1 and 10*log10(N). We should replicate that. 
+        maxlag = N-1 if N-1 <= 10*np.log10(N) else 10*np.log(N)
+        fit_kw['maxlag'] = int(np.ceil(maxlag))
     ARM = tsa.AR(data, **spec_kw).fit(**fit_kw)
     alphas = ARM.params[1:]
     return ARM.sigma2 / (1 - alphas.sum())**2
-
-            
 
 _geweke_variance = dict()
 _geweke_variance['ar'] = _spectrum0_ar

@@ -197,6 +197,32 @@ def spinv(M):
     else:
         return nla.inv(M)
 
+def interleave(*arrays, axis=0):
+    if axis > 1:
+        raise NotImplementedError("'interleave' is only supported for two-dimensional arrays")
+    shape = arrays[0].shape
+    N_arrays = len(arrays)
+    if len(shape) == 1:
+        N_items = np.sum([len(array) for array in arrays])
+        aout = np.empty(N_items)
+        for i, array in enumerate(arrays):
+            aout[i::N_arrays] = array
+    elif len(shape) == 2:
+        if axis:
+            arrays = [array.T for array in arrays]
+        conformal = all([arrays[0].shape == array.shape for array in arrays])
+        if not conformal:
+            raise ValueError('ValueError: all the input array dimensions must match exactly')
+        N_items = np.sum([array.shape[0] for array in arrays])
+        aout = np.empty((N_items, arrays[0].shape[1]))
+        for i, array in enumerate(arrays):
+            aout[i::N_arrays] = array
+        if axis:
+            aout = aout.T
+    return aout
+
+
+
 #########################
 # STATISTICAL UTILITIES #
 #########################

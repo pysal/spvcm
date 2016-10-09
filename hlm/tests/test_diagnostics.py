@@ -71,4 +71,15 @@ class Test_PSRF(ut.TestCase):
             np.testing.assert_allclose(v, np.squeeze(limit_vars[k]),
                                        rtol=RTOL, atol=ATOL,
                                        err_msg='Failed in {}'.format(k))
-        
+
+class Test_Gekewe(ut.TestCase):
+    pass
+
+class Test_Effective_Size(ut.TestCase):
+    pass
+
+class Test_HPD_Interval(ut.TestCase):
+    pass
+
+class Test_Summarize(ut.TestCase):
+    pass
