@@ -1,13 +1,10 @@
 import warnings
 from datetime import datetime as dt
 import numpy as np
-import pysal as ps
 import copy
 import multiprocessing as mp
-import sqlite3 as sql
 from .sqlite import head_to_sql, start_sql
 from .plotting.traces import plot_trace
-from .utils import no_op
 from .diagnostics import summarize
 from collections import OrderedDict
 import pandas as pd
@@ -16,6 +13,7 @@ import os
 ######################
 # SAMPLER MECHANISMS #
 ######################
+
 
 class Sampler_Mixin(object):
     def __init__(self):
@@ -228,7 +226,7 @@ class Trace(object):
                 if chain is None:
                     raise Exception('Variable names are heterogeneous in chains and no default index provided.')
                 else:
-                    warn('Variable names are heterogenous in chains!', stacklevel=2)
+                    warnings.warn('Variable names are heterogeneous in chains!', stacklevel=2)
                     return list(self.chains[chain].keys())
             self._varnames = list(self.chains[0].keys())
             return self._varnames
@@ -377,10 +375,6 @@ class Trace(object):
     def summarize(self, level=0):
         return summarize(self, level=level)
 
-    @property
-    def summary(self):
-        return summary(self)
-    
     def __getitem__(self, key):
         """
         Getting an item from a trace can be done using at most three indices, where:
@@ -677,7 +671,7 @@ class Trace(object):
             traces = ([cls.from_csv(filename=os.path.join(filepath, f)
                                     ,multi=False) for f in targets])
             if traces == []:
-                raise FileNotFoundError("No such file or directory: " +
+                raise IOError("No such file or directory: " +
                                         filepath + filestem)
 
             return cls(*[trace.chains[0] for trace in traces])
