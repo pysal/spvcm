@@ -11,8 +11,8 @@ def rebuild_test_data(force=False):
     from hlm.both_levels.tests import make_data as bltests
     from hlm.upper_level.tests import make_data as ultests
     from hlm.lower_level.tests import make_data as lltests
-    from hlm.hierarchical.msvc import make_data as msvctests
-    from hlm.hierarchical.svc import make_data as svctests
+    from hlm.hierarchical.msvc.tests import make_data as msvctests
+    from hlm.hierarchical.svc.tests import make_data as svctests
     from hlm.tests import make_data as overall
     for module in [bltests, ultests, lltests, overall, msvctests, svctests]:
         module.build()
