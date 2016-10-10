@@ -8,7 +8,7 @@ import copy
 from ...both_levels.generic import Base_Generic
 from ...both_levels.generic.model import SAMPLERS as generic_parameters
 from ... import verify
-from ...utils import sma_covariance, ind_covariance, splogdet, chol_mvn
+from ...utils import sma_covariance, ind_covariance, chol_mvn
 
 
 

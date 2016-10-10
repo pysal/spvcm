@@ -1,6 +1,5 @@
 from __future__ import division
 
-import types
 import numpy as np
 import scipy.stats as stats
 import copy
@@ -9,8 +8,7 @@ from numpy import linalg as la
 from warnings import warn as Warn
 from ...abstracts import Sampler_Mixin, Hashmap, Trace
 from ... import verify
-from ...utils import speigen_range, splogdet, ind_covariance, chol_mvn
-from ...steps import metropolis
+from ...utils import ind_covariance, chol_mvn
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2']
@@ -26,6 +24,7 @@ class Base_MVCM(Sampler_Mixin):
                  extra_traced_params = None,
                  priors=None,
                  starting_values=None):
+        super(Base_MVCM, self).__init__()
         
         N, p = X.shape
         _N, J = Delta.shape
@@ -43,10 +42,11 @@ class Base_MVCM(Sampler_Mixin):
         if starting_values is None:
             starting_values = dict()
         
-        leftovers = self._setup_priors(**priors)
+        self._setup_priors(**priors)
         self._setup_starting_values(**starting_values)
 
         self.cycles = 0
+        self.configs = None
         
 
         try:
@@ -88,8 +88,8 @@ class Base_MVCM(Sampler_Mixin):
         st.Tau2_an = st.J / 2 + st.Tau2_a0
         st.In = np.identity(st.N)
         st.Ij = np.identity(st.J)
-        DeltaAlphas = np.dot(st.Delta, st.Alphas)
-        XBetas = np.dot(st.X, st.Betas)
+        st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
+        st.XBetas = np.dot(st.X, st.Betas)
         
         st.Psi_1 = ind_covariance
         st.Psi_2 = ind_covariance

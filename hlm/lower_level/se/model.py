@@ -6,7 +6,6 @@ import copy
 from ...both_levels.generic import Base_Generic
 from ... import verify
 from ...utils import se_covariance, ind_covariance
-from ...priors import constant
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Rho']
