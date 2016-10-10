@@ -1,54 +1,11 @@
-import scipy.linalg as scla
-import scipy.stats as stats
-import scipy.sparse as spar
 import numpy as np
 import numpy.linalg as la
-from ...utils import splogdet, chol_mvn
+from ...utils import splogdet
 from ...steps import metropolis
 
 #############################
 # SPATIAL SAMPLE METHODS    #
 #############################
-
-def sample_spatial(confs, value, state, logp):
-    """
-    Sample a spatial parameter according to the rules stored in the parameter's
-    Generic.Parameter.configs
-
-    Parameters
-    ----------
-    confs   :   Namespace
-                a namespace containing the configuration options for the
-                parameter being sampled
-    value   :   float or int
-                the current value of the parameter
-    logp    :   callable(state, value)
-                a function that takes the state and a parameter value and
-                returns the log of the probability density function
-
-    Returns
-    -------
-    a new value of the spatial parameter, drawn according to the information in
-    confs.
-    """
-    new_val, accepted = metropolis(state, value, confs.proposal,
-                                   logp, confs.jump)
-    # increment relevant parameters
-    if accepted:
-        confs.accepted += 1
-    else:
-        confs.rejected += 1
-
-    #adapt if in adaptive phase
-    if confs.adapt:
-        confs.ar = confs.accepted / (confs.rejected+confs.accepted)
-        if confs.ar < confs.ar_low:
-            confs.jump /= confs.adapt_step
-        elif confs.ar > confs.ar_hi:
-            confs.jump *= confs.adapt_step
-    if (confs.accepted + confs.rejected) > confs.max_adapt:
-            confs.adapt = False
-    return new_val
 
 def logp_rho(state, val):
     """
