@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
+from .utils import thru_op
+from .abstracts import Trace, Hashmap
 import warnings
 from collections import OrderedDict
 import copy
 
 try:
-    from rpy2 .rinterface import RRuntimeError
+    import readline #hack to work around a conda bug
+    from rpy2.rinterface import RRuntimeError
     from rpy2.robjects.packages import importr
     _coda = importr('coda')
     HAS_CODA = True
@@ -17,6 +20,102 @@ except RRuntimeError:
     HAS_CODA = False
     HAS_RPY2 = True
 
+#############
+# Summarize #
+#############
+
+def summarize(model = None, trace = None, chain=None, varnames=None,
+              level=0):
+    """
+    Summarize a trace object, providing its mean, median, HPD,
+    standard deviation, and effective size.
+
+    Arguments
+    ---------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the
+                statistic.
+    level   :   int
+                ordered in terms of how much information reduction occurs. a level 0 summary
+                provides the output for each chain. A level 1 summary provides output
+                grouped over all chains.
+    """
+    _resolve_to_trace(model, trace, chain, varnames)
+    dfs = trace.to_df()
+    if isinstance(dfs, list):
+        multi_index = ['Chain_{}'.format(i) for i in range(len(dfs))]
+        df = pd.concat(dfs, axis=1, keys=multi_index)
+    else:
+        df = pd.concat((dfs,), axis=1, keys=['Chain_0'])
+    df = df.describe().T[['count', 'mean', '50%', 'std']]
+    HPDs = hpd_interval(trace=trace, p=.95)
+    if HAS_CODA:
+        ESS = effective_size(trace=trace, use_R=True)
+    else:
+        warn('Computing effective sample size may take a while due to statsmodels.tsa.AR.'
+                , stacklevel=2)
+        ESS = effective_size(trace=trace, use_R=False)
+    flattened_HPDs = []
+    flattened_ESSs = []
+    if isinstance(HPDs, dict):
+        HPDs = [HPDs]
+    if isinstance(ESS, dict):
+        ESS = [ESS]
+    for i_chain, chain in enumerate(HPDs):
+        this_HPD = dict()
+        this_ESS = dict()
+        for key,val in chain.items():
+            if isinstance(val, list):
+                for i, hpd_tuple in enumerate(val):
+                    name = '{}_{}'.format(key, i)
+                    this_HPD.update({name:hpd_tuple})
+                    this_ESS.update({name:ESS[i_chain][key][i]})
+            else:
+                this_HPD.update({key:val})
+                this_ESS.update({key:ESS[i_chain][key]})
+        flattened_HPDs.append(this_HPD)
+        flattened_ESSs.append(this_ESS)
+    #return df, flattened_HPDs, flattened_ESSs
+    df['HPD_low'] = None
+    df['HPD_high'] = None
+    df['N_effective'] = None
+    for i, this_chain_HPD in enumerate(flattened_HPDs):
+        this_chain_ESS = flattened_ESSs[i]
+        outer_key = 'Chain_{}'.format(i)
+        keys = [(outer_key, inner_key) for inner_key in this_chain_HPD.keys()]
+        lows, highs = zip(*[this_chain_HPD[key[-1]] for key in keys])
+        n_eff = [this_chain_ESS[key[-1]] for key in keys]
+        df.ix[keys, 'HPD_low'] = lows
+        df.ix[keys, 'HPD_high'] = highs
+        df.ix[keys, 'N_effective'] = n_eff
+    df['median'] = df['50%']
+    df['N_iters'] = df['count'].apply(int)
+    df['N_effective'] = df['N_effective'].apply(round)
+    df.drop('count', axis=1, inplace=True)
+    df['AR_loss'] = (df['N_iters'] - df['N_effective'])/df['N_iters']
+    df = df[['mean', 'HPD_low', 'median', 'HPD_high', 'std', 'N_iters', 'N_effective', 'AR_loss']]
+    if level>0:
+        df = df.unstack()
+        grand_mean = df['mean'].mean(axis=0)
+        lowest_HPD = df['HPD_low'].min(axis=0)
+        grand_median = df['median'].median(axis=0)
+        highest_HPD = df['HPD_high'].max(axis=0)
+        std = df['std'].mean(axis=0)
+        neff = df['N_effective'].sum(axis=0)
+        N = df['N_iters'].sum(axis=0)
+        df = pd.concat([grand_mean, lowest_HPD, grand_median,
+                        highest_HPD, std, N, neff], axis=1)
+        df.columns = ['grand_mean', 'min_HPD', 'grand_median', 'max_HPD', 'std',
+                      'sum(N_iters)', 'sum(N_effective)']
+    return df
 
 #####################################
 # Potential Scale Reduction Factors #
@@ -181,8 +280,7 @@ def geweke(model = None, trace=None, chain=None,
                 If provided, must contain `spec_kw` and `fit_kw`. `spec_kw` is a dictionary of keyword arguments passed to the statsmodels AR class, and `fit_kw` is a dictionary of arguments passed to the subsequent AR.fit() call.
     """
     trace = _resolve_to_trace(model, trace, chain, varnames)
-    if varnames is None:
-        varnames = trace.varnames
+    varnames = trace.varnames
     variance_function = _geweke_variance[variance_method]
     all_stats = []
     for i, chain in enumerate(trace.chains):
@@ -258,6 +356,38 @@ def _geweke_statistic(data, drop, hold, varfunc=None):
     return ((drop_mean - hold_mean) / np.sqrt((drop_var / n_drop)
                                             +(hold_var / n_hold)))
 
+def _naive_var(data, *_, **__):
+    """
+    Naive variance computation of a time `x`, ignoring dependence between the
+    variance within different windows
+    """
+    return np.var(data, ddof=1)
+
+def _spectrum0_ar(data, spec_kw=dict(), fit_kw=dict()):
+    """
+    The corrected spectral density estimate of time series variance,
+    as applied in CODA. Written to replicate R, so defaults change.
+    Note: this is very slow when there is a lot of data.
+    """
+    try:
+        from statsmodels.api import tsa
+    except ImportError:
+        raise ImportError('Statsmodels is required to use the AR(0) '
+                           ' spectral density estimate of the variance.')
+    if fit_kw == dict():
+        fit_kw['ic']='aic'
+        N = len(data)
+        # R uses the smaller of N-1 and 10*log10(N). We should replicate that.
+        maxlag = N-1 if N-1 <= 10*np.log10(N) else 10*np.log(N)
+        fit_kw['maxlag'] = int(np.ceil(maxlag))
+    ARM = tsa.AR(data, **spec_kw).fit(**fit_kw)
+    alphas = ARM.params[1:]
+    return ARM.sigma2 / (1 - alphas.sum())**2
+
+_geweke_variance = dict()
+_geweke_variance['ar'] = _spectrum0_ar
+_geweke_variance['naive'] = _naive_var
+
 ##################
 # Effective Size #
 ##################
@@ -278,9 +408,7 @@ def effective_size(model=None, trace=None, chain=None, varnames=None,
     estimate is *slow* for large chains. If you have a properly configured R
     installation with the python package `rpy2` and the R package `coda` installed,
     you can opt to pass through to CODA by passing `use_R=True`.
-    
-    Arguments 
-    ----------
+
     Arguments
     ----------
     model   :   Any model object.
@@ -335,11 +463,48 @@ def _effective_size(x, use_R=False):
 #############################
 
 def hpd_interval(model = None,  trace = None,  chain = None,  varnames = None,  p=.95):
+    """
+
+    Parameters
+    ----------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the
+                statistic.
+    p       :   float
+                percent of highest density to extract
+
+    Returns
+    -------
+    hashmap of results, where each result is {'varname':(low, hi)}
+
+    """
     trace = _resolve_to_trace(model, trace, chain, varnames)
     stats = trace.map(_hpd_interval, p=p)
     return stats if len(stats) > 1 else stats[0]
     
 def _hpd_interval(data, p=.95):
+    """
+
+    Parameters
+    ----------
+    data    :   numpy.ndarray
+                data to compute the hpd
+    p       :   float
+                percent of highest density to extract
+
+    Returns
+    -------
+    tuple of (low,hi) boundaries of the highest posterior fraction.
+
+    """
     data = np.sort(data)
     N = len(data)
     N_in = int(np.ceil(N*p))
@@ -348,91 +513,171 @@ def _hpd_interval(data, p=.95):
     pivot = np.argmin(data[tail] - data[head])
     return data[pivot], data[pivot+N_in]
 
-#############
-# Summarize #
-#############
+############################################
+# Markov Chain Monte Carlo Standard Errors #
+############################################
 
-def summarize(trace, level=0):
+def mcse(model = None, trace=None, chain = None, varnames = None,
+           rescale=2, method='bartlett', N_chunks=None, transform=thru_op):
     """
-    Summarize a trace object, providing its mean, median, HPD, 
-    standard deviation, and effective size.
 
-    Arguments
-    ---------
-    trace   :   trace
-                trace object on which to compute the summary
-    level   :   int 
-                ordered in terms of how much information reduction occurs. a level 0 summary 
-                provides the output for each chain. A level 1 summary provides output 
-                grouped over all chains. 
+    Parameters
+    ----------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the
+                statistic.
+    rescale :   real positive number
+                governs the shrinkage/reduction of the relevant data
+    method  :   str (default: 'bartlett')
+                string describing method used to compute the standard errors.
+                Supported options:
+                    - 'bm' : batch means, reduces chain by the mean of each `N_chunks` block
+                    - 'obm': overlapping batch means, reduces chain by the mean of `N_chunks` rolling blocks
+                    - 'tukey': weighted reduction using a Tukey window (see np.tukey)
+                    - 'hanning': same as 'tukey'
+                    - 'bartlett': weighted reduction using a Bartlett window (see np.bartlett)
+    transform:  callable
+                function or callable class that consumes data and returns it in an identical shape. Used
+                if the values of interest are a transformation of the given parameter.
+    Returns
+    -------
+    hashmap or list of hashmaps that contain the standard errors of the given chain.
     """
-    dfs = trace.to_df()
-    if isinstance(dfs, list):
-        multi_index = ['Chain_{}'.format(i) for i in range(len(dfs))]
-        df = pd.concat(dfs, axis=1, keys=multi_index)
+    trace = _resolve_to_trace(model, trace, chain, varnames)
+    out = trace.map(_mcse, rescale=rescale, method=method, N_chunks=N_chunks, transform=transform)
+    return out if len(out) > 1 else out[0]
+
+def _mcse(x, rescale=2, N_chunks=None, method='bm', transform=thru_op):
+    if rescale is None and N_chunks is None:
+        raise ValueError("Either 'rescale' or 'N_chunks' must be supplied.")
+    elif rescale is not None and N_chunks is None:
+        size = len(x)
+        if 0 < rescale < 1:
+            rescale = 1/rescale
+        chunk_size = np.floor(size**(1.0/rescale))
+        N_chunks = np.floor(size / chunk_size)
+    elif N_chunks is not None:
+        pass
     else:
-        df = pd.concat((dfs,), axis=1, keys=['Chain_0'])
-    df = df.describe().T[['count', 'mean', '50%', 'std']]
-    HPDs = hpd_interval(trace=trace, p=.95)
-    if HAS_CODA:
-        ESS = effective_size(trace=trace, use_R=True)
-    else:
-        warn('Computing effective sample size may take a while due to statsmodels.tsa.AR.'
-                , stacklevel=2)
-        ESS = effective_size(trace=trace, use_R=False)
-    flattened_HPDs = []
-    flattened_ESSs = []
-    if isinstance(HPDs, dict):
-        HPDs = [HPDs]
-    if isinstance(ESS, dict):
-        ESS = [ESS]
-    for i_chain, chain in enumerate(HPDs):
-        this_HPD = dict() 
-        this_ESS = dict()
-        for key,val in chain.items():
-            if isinstance(val, list):
-                for i, hpd_tuple in enumerate(val):
-                    name = '{}_{}'.format(key, i)
-                    this_HPD.update({name:hpd_tuple})
-                    this_ESS.update({name:ESS[i_chain][key][i]})
-            else:
-                this_HPD.update({key:val})
-                this_ESS.update({key:ESS[i_chain][key]})
-        flattened_HPDs.append(this_HPD)
-        flattened_ESSs.append(this_ESS)
-    #return df, flattened_HPDs, flattened_ESSs
-    df['HPD_low'] = None
-    df['HPD_high'] = None
-    df['N_effective'] = None
-    for i, this_chain_HPD in enumerate(flattened_HPDs):
-        this_chain_ESS = flattened_ESSs[i]
-        outer_key = 'Chain_{}'.format(i)
-        keys = [(outer_key, inner_key) for inner_key in this_chain_HPD.keys()]
-        lows, highs = zip(*[this_chain_HPD[key[-1]] for key in keys])
-        n_eff = [this_chain_ESS[key[-1]] for key in keys]
-        df.ix[keys, 'HPD_low'] = lows
-        df.ix[keys, 'HPD_high'] = highs
-        df.ix[keys, 'N_effective'] = n_eff
-    df['median'] = df['50%']
-    df['N_iters'] = df['count'].apply(int)
-    df['N_effective'] = df['N_effective'].apply(round)
-    df.drop('count', axis=1, inplace=True)
-    df['AR_loss'] = (df['N_iters'] - df['N_effective'])/df['N_iters']
-    df = df[['mean', 'HPD_low', 'median', 'HPD_high', 'std', 'N_iters', 'N_effective', 'AR_loss']]
-    if level>0:
-        df = df.unstack()
-        grand_mean = df['mean'].mean(axis=0)
-        lowest_HPD = df['HPD_low'].min(axis=0)
-        grand_median = df['median'].median(axis=0)
-        highest_HPD = df['HPD_high'].max(axis=0)
-        std = df['std'].mean(axis=0)
-        neff = df['N_effective'].sum(axis=0)
-        N = df['N_iters'].sum(axis=0)
-        df = pd.concat([grand_mean, lowest_HPD, grand_median, 
-                        highest_HPD, std, N, neff], axis=1)
-        df.columns = ['grand_mean', 'min_HPD', 'grand_median', 'max_HPD', 'std', 
-                      'sum(N_iters)', 'sum(N_effective)']
-    return df
+        raise Exception("Options 'rescale' and 'N_chunks' were not resolved successfully!")
+
+    try:
+        method = _mcse_dispatch[method]
+    except KeyError:
+        raise KeyError("Supported methods are: 'bm', 'obm', 'bartlett', 'tukey'")
+    return method(x, int(N_chunks), transform = transform)
+
+def _mcse_bm(x, N_chunks, transform = thru_op):
+    """
+    Compute a Markov Chain Monte Carlo Standard Error
+     using raw batch means
+
+    Parameters
+    ----------
+    x           :   numpy.ndarray
+    N_chunks    :   int
+    transform   :   callable
+
+    Returns
+    -------
+    float containing the standard error of x
+    """
+    N = len(x)
+    chunk_size = np.floor(N / N_chunks).astype(int)
+    y = np.asarray([transform(split).mean() for split in np.array_split(x, N_chunks)])
+    mean = transform(x).mean()
+    variance = chunk_size * ((y - mean)**2).sum() / (N_chunks - 1) #isn' this chunk_size * (x.var(ddof=1)?)
+    return np.sqrt(variance / N)
+
+def _mcse_obm(x, N_chunks, transform = thru_op):
+    """
+    Compute a Markov Chain Monte Carlo Standard Error
+     using overlapping batch means
+
+    Parameters
+    ----------
+    x           :   numpy.ndarray
+    N_chunks    :   int
+    transform   :   callable
+
+    Returns
+    -------
+    float containing the standard error of x
+    """
+    N = len(x)
+    a = N - N_chunks + 1
+    chunk_size = np.floor(N / N_chunks).astype(int)
+    y = pd.rolling_apply(x, chunk_size, lambda vec: transform(vec).mean())
+    y = y[~np.isnan(y)]
+    mean = transform(x).mean()
+    variance = N * chunk_size * ((y - mean)**2).sum() / (a -1) / a
+    return np.sqrt(variance / N)
+
+def _mcse_bartlett(x, N_chunks, transform = thru_op):
+    """
+    Compute a Markov Chain Monte Carlo Standard Error
+     using a Bartlett window
+
+    Parameters
+    ----------
+    x           :   numpy.ndarray
+    N_chunks    :   int
+    transform   :   callable
+
+    Returns
+    -------
+    float containing the standard error of x
+    """
+    N = len(x)
+    chunk_size = np.floor(N / N_chunks).astype(int)
+    brange = np.arange(1, chunk_size+1)
+    alpha = (1 - brange / chunk_size) * (1 - brange / N)
+    mean = transform(x).mean()
+    diffs = ((x[0:(N-i)] - mean) * (x[i:N] - mean) for i in range(chunk_size+1))
+    R = np.asarray([diff.mean() for diff in diffs])
+    variance = R[0] + 2 * (alpha * R[1:]).sum()
+    return np.sqrt(variance / N)
+
+def _mcse_hanning(x, N_chunks, transform = thru_op):
+    """
+    Compute a Markov Chain Monte Carlo Standard Error
+     using a Tukey window
+
+    Parameters
+    ----------
+    x           :   numpy.ndarray
+    N_chunks    :   int
+    transform   :   callable
+
+    Returns
+    -------
+    float containing the standard error of x
+    """
+    N = len(x)
+    chunk_size = np.floor(N / N_chunks).astype(int)
+    brange = np.arange(1, chunk_size+1)
+    alpha = (1 + np.cos(np.pi * brange / chunk_size)) / 2 * (1 - brange / N)
+    mean = transform(x).mean()
+    diffs = ((x[0:(N-i)] - mean) * (x[i:N] - mean) for i in range(chunk_size+1))
+    R = np.asarray([diff.mean() for diff in diffs])
+    variance = R[0] + 2 * (alpha * R[1:]).sum()
+    return np.sqrt(variance / N)
+
+_mcse_dispatch = dict(
+    tukey = _mcse_hanning,
+    hanning = _mcse_hanning,
+    bartlett = _mcse_bartlett,
+    obm = _mcse_obm,
+    bm = _mcse_bm
+)
 
 #############
 # Utilities #
@@ -443,12 +688,12 @@ def _resolve_to_trace(model, trace, chain, varnames):
     Resolve a collection of information down to a trace. This reduces the
     passed arguments to a trace that can be used for analysis based on names
     in varnames.
-    
+
     If `trace` is passed, it is subset according to `varnames`, and a copy returned. It takes precedence.
     Otherwise, if `model` is passed, its traces are taken.
     Finally, if `chain` is passed, a trace is constructed to structure the chain.
     In all cases, if `varnames` is passed, it is used to name or subset the given data.
-    
+
     """
     n_passed = sum([model is not None, trace is not None, chain is not None])
     if n_passed > 1:
@@ -459,54 +704,23 @@ def _resolve_to_trace(model, trace, chain, varnames):
     if trace is not None:
         if varnames is not None:
             return trace.drop(*[var for var in trace.varnames
-                               if var not in varnames], inplace=False)
+                                if var not in varnames], inplace=False)
         else:
             return copy.deepcopy(trace)
     if model is not None:
         return _resolve_to_trace(model=None, trace=model.trace,
                                  chain=None, varnames=varnames)
     if chain is not None:
-        m,n = chain.shape[0:2]
-        rest = chain.shape[2:]
-        new_p = np.multiply(*rest)
-        chain = chain.reshape(m,n,new_p)
+        if chain.ndim > 1:
+            m, n = chain.shape[0:2]
+            rest = chain.shape[2:]
+            new_p = np.multiply(*rest)
+            chain = chain.reshape(m, n, new_p)
         if varnames is None:
             varnames = ['parameter_{}'.format(i) for i in new_p]
         else:
             if len(varnames) != new_p:
                 raise NotImplementedError('Parameter Subsetting by varnames '
-                                  'is not currenlty implented for raw arrays')
-        return Trace([Hashmap({k:run.T[p] for p,k in enumerate(varnames)})
+                                          'is not currenlty implented for raw arrays')
+        return Trace([Hashmap({k: run.T[p] for p, k in enumerate(varnames)})
                       for run in chain])
-        
-def _naive_var(data, *_, **__):
-    """
-    Naive variance computation of a time `x`, ignoring dependence between the
-    variance within different windows
-    """
-    return np.var(data, ddof=1)
-
-def _spectrum0_ar(data, spec_kw=dict(), fit_kw=dict()):
-    """
-    The corrected spectral density estimate of time series variance,
-    as applied in CODA. Written to replicate R, so defaults change. 
-    Note: this is very slow when there is a lot of data. 
-    """
-    try:
-        from statsmodels.api import tsa
-    except ImportError:
-        raise ImportError('Statsmodels is required to use the AR(0) '
-                           ' spectral density estimate of the variance.')
-    if fit_kw == dict():
-        fit_kw['ic']='aic'
-        N = len(data) 
-        # R uses the smaller of N-1 and 10*log10(N). We should replicate that. 
-        maxlag = N-1 if N-1 <= 10*np.log10(N) else 10*np.log(N)
-        fit_kw['maxlag'] = int(np.ceil(maxlag))
-    ARM = tsa.AR(data, **spec_kw).fit(**fit_kw)
-    alphas = ARM.params[1:]
-    return ARM.sigma2 / (1 - alphas.sum())**2
-
-_geweke_variance = dict()
-_geweke_variance['ar'] = _spectrum0_ar
-_geweke_variance['naive'] = _naive_var

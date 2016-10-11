@@ -24,7 +24,14 @@ def thru_op(*args, **kws):
     """
     This is a thru-op. It returns everything passed to it.
     """
-    return args, kws
+    if len(args) == 1 and kws == dict():
+        return args[0]
+    elif len(args) == 1 and kws != dict():
+        return args[0], kws
+    elif len(args) == 0:
+        return kws
+    else:
+        return args, kws
 
 ##########################
 # BUILD EXAMPLE DATASETS #
@@ -48,8 +55,6 @@ def south(df=False):
     and the dataframe contains the raw dataset
     """
     import pysal as ps
-    import numpy as np
-    import pandas as pd
 
     data = ps.pdio.read_files(ps.examples.get_path('south.shp'))
     data = data[data.STATE_NAME != 'District of Columbia']

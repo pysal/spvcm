@@ -12,7 +12,8 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
     model   :   Model object
                 a model with a trace attribute
     burn    :   int
-                the number of iterations to discard from the front of the trace
+                the number of iterations to discard from the front of the trace.
+                If negative, the number of iterations to use from the tail of the trace.
     thin    :   int
                 the number of iterations to discard between iterations
     varnames :  str or list
@@ -30,6 +31,8 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
     -------
     figure, axis tuple, where axis is (len(varnames), 2)
     """
+    if thin is None or thin is 0:
+        thin = 1
     if model is None:
         if trace is None:
             raise Exception('Neither model nor trace provided.')
@@ -65,6 +68,7 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
                 sns.kdeplot(this_param, ax=ax[i,1], **kde_kwargs)
             ax[i,0].plot(this_param, **trace_kwargs)
             ax[i,1].set_title(param_name)
+            ax[i,0].set_xbound(0, len(this_param[burn::thin]))
     fig.tight_layout()
     return fig, ax
 

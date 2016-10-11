@@ -3,12 +3,12 @@ from datetime import datetime as dt
 import numpy as np
 import copy
 import multiprocessing as mp
-from .sqlite import head_to_sql, start_sql
-from .plotting.traces import plot_trace
-from .diagnostics import summarize
-from collections import OrderedDict
 import pandas as pd
 import os
+
+from .sqlite import head_to_sql, start_sql
+from .plotting.traces import plot_trace
+from collections import OrderedDict
 
 ######################
 # SAMPLER MECHANISMS #
@@ -337,7 +337,7 @@ class Trace(object):
     @property
     def n_iters(self):
         lengths = [len(chain[self.varnames[0]]) for chain in self.chains]
-        if len(lens) == 1:
+        if len(lengths) == 1:
             return lengths[0]
         else:
             return lengths
@@ -373,7 +373,8 @@ class Trace(object):
         return f,ax
    
     def summarize(self, level=0):
-        return summarize(self, level=level)
+        from .diagnostics import summarize
+        return summarize(trace=self, level=level)
 
     def __getitem__(self, key):
         """
