@@ -1,7 +1,7 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-
+from .. import diagnostics as diag
 def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
                kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
     """
@@ -72,3 +72,234 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
     fig.tight_layout()
     return fig, ax
 
+def seplot(model=None, trace=None, chain=None, varnames=None,
+           burn=0, thin=None, N_bins=200,
+           plot_kw=None, fig_kw=None, ax=None):
+    """
+    Arguments
+    ---------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the
+                statistic.
+    N_bins  :   int
+                number of subsamples over which to compute the standard error
+    roller  :   callable
+                pandas rolling function that takes argument `window` to specify window size
+    burn    :   int
+                number of iterations to discard from the front of the chain. If negative, number of iterations to keep from the tail of the chain.
+    thin    :   int
+                step to thin the chain. Picks every `thin`th observation.
+    plot_kw :   dict/keyword arguments
+                passed to the line plot call
+    fig_kw  :   dict/keyword arguments
+                passed to the plt.subplots() call
+    ax      :   matplotlib axis
+                pass if you want to plot this on an existing set of axes.
+
+    Returns
+    --------
+    figure,axis tuple or, if ax is passed, ax
+    """
+    trace = diag._resolve_to_trace(model, trace, chain, varnames)
+
+    thin = 1 if thin is None else thin
+
+    trace = diag._resolve_to_trace(None, trace[burn::thin], None, None)
+    statistics = trace.map(_se_vector, N_bins=N_bins)
+
+    if fig_kw is None:
+        fig_kw = dict()
+    fig_kw['figsize'] = fig_kw.get('figsize', (5, 2*len(trace.varnames)))
+    fig_kw['sharex'] = fig_kw.get('sharex', True)
+    if plot_kw is None:
+        plot_kw = dict()
+
+    if ax is None:
+        f,ax = plt.subplots(len(trace.varnames), 1, **fig_kw)
+
+    for i, varname in enumerate(trace.varnames):
+        to_plot = (np.asarray(result[varname]) for result in statistics)
+        for results in to_plot:
+            if results.ndim > 1:
+                results = results.T
+            ax[i].plot(results, **plot_kw)
+            ax[i].set_title(varname)
+        ax[i].set_ylabel('MC Standard Error')
+    try:
+        f.tight_layout()
+        return f,ax
+    except NameError:
+        return ax
+
+
+def rollplot(model=None, trace=None, chain=None, varnames=None,
+             order=100, roller=pd.rolling_mean,
+             burn=0, thin=None, plot_kw=None, fig_kw=None, ax=None):
+    """
+    Arguments
+    ---------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the
+                statistic.
+    order   :   int
+                the order of the moving process
+    roller  :   callable
+                pandas rolling function that takes argument `window` to specify window size
+    burn    :   int
+                number of iterations to discard from the front of the chain. If negative, number of iterations to keep from the tail of the chain.
+    thin    :   int
+                step to thin the chain. Picks every `thin`th observation.
+    plot_kw :   dict/keyword arguments
+                passed to the line plot call
+    fig_kw  :   dict/keyword arguments
+                passed to the plt.subplots() call
+    ax      :   matplotlib axis
+                pass if you want to plot this on an existing set of axes.
+
+    Returns
+    --------
+    figure,axis tuple or, if ax is passed, ax
+    """
+
+    trace = diag._resolve_to_trace(model, trace, chain, varnames)
+
+    thin = 1 if thin is None else thin
+    trace = diag._resolve_to_trace(model, trace[burn::thin], chain, varnames)
+
+    if fig_kw is None:
+        fig_kw = dict()
+    fig_kw['figsize'] = fig_kw.get('figsize', (5, 2*len(trace.varnames)))
+    fig_kw['sharex'] = fig_kw.get('sharex', True)
+    if plot_kw is None:
+        plot_kw = dict()
+
+    if ax is None:
+        f,ax = plt.subplots(len(trace.varnames), 1, **fig_kw)
+    for i, varname in enumerate(trace.varnames):
+        for j in range(trace.n_chains):
+            data = trace[j, varname]
+            ax[i].plot(roller(data, order), **plot_kw)
+        ax[i].set_title(varname)
+    try:
+        f.tight_layout()
+        return f,ax
+    except NameError:
+        return ax
+
+
+def conv_plot(model=None, trace=None, chain=None, varnames=None,
+              N_bins=200, roller=pd.rolling_mean,
+              burn=0, thin=None, plot_kw=None, fig_kw=None, ax=None):
+    """
+    This plots a moving average of the chain alongside of a standard error indicator.     This is a bad function and shouldn't be used unless N_bins is very high relative to the chain length. It takes a long time to compute.
+
+    Arguments
+    ---------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the
+                statistic.
+    N_bins  :   int
+                the number of sample points to use to compute the rolling mean and standard errors.
+    roller  :   callable
+                pandas rolling function that takes argument `window` to specify window size
+    burn    :   int
+                number of iterations to discard from the front of the chain. If negative, number of iterations to keep from the tail of the chain.
+    thin    :   int
+                step to thin the chain. Picks every `thin`th observation.
+    plot_kw :   dict/keyword arguments
+                passed to the line plot call
+    fig_kw  :   dict/keyword arguments
+                passed to the plt.subplots() call
+    ax      :   matplotlib axis
+                pass if you want to plot this on an existing set of axes.
+
+    Returns
+    --------
+    figure,axis tuple or, if ax is passed, ax
+
+    """
+    trace = diag._resolve_to_trace(model, trace, chain, varnames)
+
+    thin = 1 if thin is None else thin
+
+    trace = diag._resolve_to_trace(None, trace[burn::thin], None,None)
+
+    if fig_kw is None:
+        fig_kw = dict()
+    fig_kw['figsize'] = fig_kw.get('figsize', (5, 2*len(trace.varnames)))
+    fig_kw['sharex'] = fig_kw.get('sharex', 'col')
+    if plot_kw is None:
+        plot_kw = dict()
+
+    f,ax = plt.subplots(len(trace.varnames), 1, **fig_kw)
+
+    window = trace.n_iters - N_bins + 1
+    rolled = trace.map(roller, window=window)
+    ses = trace.map(_se_vector, N_bins=N_bins)
+
+    for i, varname in enumerate(trace.varnames):
+        for j in range(trace.n_chains):
+            this_roll = np.asarray(rolled[j][varname])
+            if this_roll.ndim > 1:
+                this_roll = this_roll[~np.isnan(this_roll)].reshape(-1, N_bins)
+            else:
+                this_roll = this_roll[~np.isnan(this_roll)]
+            this_se = np.asarray(ses[j][varname])
+
+            upper = this_roll + this_se * 2
+            lower = this_roll - this_se * 2
+            if this_roll.ndim > 1:
+                for this, up, low in zip(this_roll, upper, lower):
+                    ax[i].fill_between(np.arange(len(this)), up, low, where = up>low, alpha=.5)
+            else:
+                ax[i].fill_between(np.arange(len(this_roll)), upper, lower, where = upper>lower, alpha=.5)
+            ax[i].plot(this_roll, **plot_kw)
+        ax[i].set_title(varname)
+    return f,ax
+
+
+def _se_vector(x, N_bins):
+    """
+    A vectorized version of the monte carlo standard error estimator. Computes the
+    monte carlo standard error by breaking `x` into `N_bins`, and then compuing the standard error over the chain defined by concatenating the bins starting at the head of the chain.
+
+    If the chain is converged, the standard error estimator should converge to zero in this procedure. The speed of convergence is indicated by how quickly the standard error reduces.
+
+    Arguments
+    ----------
+    x       :   numpy.ndarray
+                an array over which to compute the standard errors
+    N_bins  :   int
+                number of bins to break `x` into to compute standard errors
+
+    Returns
+    ----------
+    N_bins-length vector containing whose element i contains the standard error of the x[:i+1] chunk.
+    """
+    splits = np.array_split(x, N_bins)
+    diags = [list(diag.mcse(chain=np.hstack(splits[:i+1])).values())[0] for i in range(N_bins)]
+    return diags

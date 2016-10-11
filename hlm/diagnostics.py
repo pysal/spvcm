@@ -1,20 +1,20 @@
 import numpy as np
 import pandas as pd
 from .utils import thru_op
-from .abstracts import Trace, Hashmap
+from .abstracts import Trace, Hashmap, _maybe_hashmap, _copy_hashmaps
 import warnings
 from collections import OrderedDict
 import copy
 
 try:
-    import readline #hack to work around a conda bug
+    import readline  # hack to work around a conda bug
     from rpy2.rinterface import RRuntimeError
     from rpy2.robjects.packages import importr
     _coda = importr('coda')
     HAS_CODA = True
     HAS_RPY2 = True
 except ImportError:
-    HAS_CODA =  False
+    HAS_CODA = False
     HAS_RPY2 = False
 except RRuntimeError:
     HAS_CODA = False
@@ -60,8 +60,8 @@ def summarize(model = None, trace = None, chain=None, varnames=None,
     if HAS_CODA:
         ESS = effective_size(trace=trace, use_R=True)
     else:
-        warn('Computing effective sample size may take a while due to statsmodels.tsa.AR.'
-                , stacklevel=2)
+        warn('Computing effective sample size may take a while due to statsmodels.tsa.AR.',
+             stacklevel=2)
         ESS = effective_size(trace=trace, use_R=False)
     flattened_HPDs = []
     flattened_ESSs = []
@@ -72,18 +72,17 @@ def summarize(model = None, trace = None, chain=None, varnames=None,
     for i_chain, chain in enumerate(HPDs):
         this_HPD = dict()
         this_ESS = dict()
-        for key,val in chain.items():
+        for key, val in chain.items():
             if isinstance(val, list):
                 for i, hpd_tuple in enumerate(val):
                     name = '{}_{}'.format(key, i)
-                    this_HPD.update({name:hpd_tuple})
-                    this_ESS.update({name:ESS[i_chain][key][i]})
+                    this_HPD.update({name: hpd_tuple})
+                    this_ESS.update({name: ESS[i_chain][key][i]})
             else:
-                this_HPD.update({key:val})
-                this_ESS.update({key:ESS[i_chain][key]})
+                this_HPD.update({key: val})
+                this_ESS.update({key: ESS[i_chain][key]})
         flattened_HPDs.append(this_HPD)
         flattened_ESSs.append(this_ESS)
-    #return df, flattened_HPDs, flattened_ESSs
     df['HPD_low'] = None
     df['HPD_high'] = None
     df['N_effective'] = None
@@ -101,8 +100,9 @@ def summarize(model = None, trace = None, chain=None, varnames=None,
     df['N_effective'] = df['N_effective'].apply(round)
     df.drop('count', axis=1, inplace=True)
     df['AR_loss'] = (df['N_iters'] - df['N_effective'])/df['N_iters']
-    df = df[['mean', 'HPD_low', 'median', 'HPD_high', 'std', 'N_iters', 'N_effective', 'AR_loss']]
-    if level>0:
+    df = df[['mean', 'HPD_low', 'median', 'HPD_high', 'std',
+             'N_iters', 'N_effective', 'AR_loss']]
+    if level > 0:
         df = df.unstack()
         grand_mean = df['mean'].mean(axis=0)
         lowest_HPD = df['HPD_low'].min(axis=0)
@@ -121,21 +121,23 @@ def summarize(model = None, trace = None, chain=None, varnames=None,
 # Potential Scale Reduction Factors #
 #####################################
 
+
 def _gelman_rubin(chain):
     """
-    Computes the original potential scale reduction factor from the 1992 paper by Gelman and Rubin:
-    
+    Computes the original potential scale reduction factor from the
+     1992 paper by Gelman and Rubin:
+
     \sqrt{\frac{\hat{V}}{W} * \frac{dof}{dof-2}}
-    
+
     where \hat{V} is a corrected estimate of the chain variance, composed of within- and between-chain variance components, W,B:
-    
+
     V_hat = W*(1-1/n) + B/n + B/(n*m)
-    
+
     and the degrees of freedom terms are:
     dof = 2 * V_hat**2 / (Var(W) + Var(B) + 2Cov(W,B)).
-    
+
     The equations of the variance and covariance are drawn directly from the original paper. This implementation should come close to the implementation in the R CODA package, which computes the same normalization factor.
-    
+
     If the chain is multivariate, it computes the statistic for each element of the multivariate chain.
     """
     m,n = chain.shape[0:2]
@@ -151,32 +153,30 @@ def _gelman_rubin(chain):
         V_hat = sigma2_hat + B/(n*m)
         t_scale = np.sqrt(V_hat)
 
-        #not sure if the chain.var(axis=1, ddof=1).var() is right.
-        var_W = (1-(1/n))**2 * chain_vars.var(ddof=1) /  m
+        #  not sure if the chain.var(axis=1, ddof=1).var() is right.
+        var_W = (1-(1/n))**2 * chain_vars.var(ddof=1) / m
         var_B = ((m+1)/(m*n))**2 * (2*B**2) / (m-1)
-        cov_s2xbar2 = np.cov(chain_vars, chain_means**2, ddof=1)[0,1]
-        cov_s2xbarmu = 2 * grand_mean * np.cov(chain_vars, chain_means, ddof=1)[0,1]
+        cov_s2xbar2 = np.cov(chain_vars, chain_means**2, ddof=1)[0, 1]
+        cov_s2xbarmu = 2 * grand_mean * np.cov(chain_vars, chain_means, ddof=1)[0, 1]
         cov_WB = (m+1)*(n-1)/(m*n**2)*(m/n)*(cov_s2xbar2 - cov_s2xbarmu)
 
-        t_dof = 2 * V_hat**2 / (var_W + var_B + 2* cov_WB)
+        t_dof = 2 * V_hat**2 / (var_W + var_B + 2 * cov_WB)
 
         psrf = np.sqrt((V_hat / W) * t_dof/(t_dof - 2))
-        
         return psrf
-        
     else:
         return [_gelman_rubin(ch.T) for ch in chain.T]
-        
+
 
 def _brooks_gelman_rubin(chain):
     """
     Computes the Brooks and Gelman psrf in equation 1.1, pg. 437 of the Brooks and Gelman article.
-    
+
     This form is:
     (n_chains + 1) / n_chains * (sigma2_hat / W) - (n-1)/(nm)
     where Sigma2_hat is the unbiased estimator for aggregate variance:
     (n-1)/n * W + B/n
-    
+
     If the chain is multivariate, this computes the univariate version over all elements of the chain.
     """
     m,n = chain.shape[0:2]
@@ -185,10 +185,10 @@ def _brooks_gelman_rubin(chain):
         chain_vars = chain.var(axis=1, ddof=1)
         chain_means = chain.mean(axis=1)
         grand_mean = chain.mean()
-        
+
         W = np.mean(chain_vars)
         B = np.var(chain_means, ddof=1)*n
-        
+
         sigma2_hat = ((n-1)/n) * W + B/n
         Rhat = (m+1)/m * (sigma2_hat / W) - ((n-1)/(m*n))
         return np.sqrt(Rhat)
@@ -202,7 +202,7 @@ def psrf(model = None, trace=None, chain=None, autoburnin=True,
     """
     Wrapper to compute the potential scale reduction factor for
     a trace object or an arbitrary chain from a MCMC sample.
-    
+
     Arguments
     ----------
     trace       :  Trace
@@ -254,7 +254,7 @@ def geweke(model = None, trace=None, chain=None,
            varnames=None, variance_method='ar', **ar_kw):
     """
     This computes the plotting version of Geweke's diagnostic for a given trace. The iterative version is due to Brooks. This implementation mirrors that in the `R` `coda` package.
-    
+
     Arguments
     ----------
     model   :   Any model object.
@@ -326,33 +326,33 @@ def _geweke_vector(data, drop, hold, n_bins, **kw):
     to_drop = np.linspace(0, in_play, num=n_bins).astype(int)
     return np.squeeze([_geweke_statistic(data[drop_idx:], drop, hold, **kw)
                        for drop_idx in to_drop])
-    
+
 def _geweke_statistic(data, drop, hold, varfunc=None):
     """
     Compute a single geweke statistic, defining sets A, B:
-    
+
     mean_A - mean_B / (var(A) + var(B))**.5
-    
+
     where A is the first `drop` % of the `data` vector, B is the last `hold` % of the data vector.
-    
+
     the variance function, `varfunc`, is the spectral density estimate of the variance.
     """
     if varfunc is None:
         varfunc = _spectrum0_ar
     hold_start = np.floor((len(data)-1) * hold).astype(int)
     bin_width = np.ceil((len(data)-1)*drop).astype(int)
-    
+
     drop_data = data[:bin_width]
     hold_data = data[hold_start:]
-    
+
     drop_mean = drop_data.mean()
     drop_var = varfunc(drop_data)
     n_drop = len(drop_data)
-    
+
     hold_mean = hold_data.mean()
     hold_var = varfunc(hold_data)
     n_hold = len(hold_data)
-    
+
     return ((drop_mean - hold_mean) / np.sqrt((drop_var / n_drop)
                                             +(hold_var / n_hold)))
 
@@ -395,13 +395,13 @@ _geweke_variance['naive'] = _naive_var
 def effective_size(model=None, trace=None, chain=None, varnames=None,
                     use_R=False):
     """
-    Compute the effective size of a trace, accounting for serial autocorrelation. 
+    Compute the effective size of a trace, accounting for serial autocorrelation.
     This statistic is:
 
     N * var(x)/spectral0(x)
 
     where spectral0(x) is the spectral density of x at lag 0, an
-    autocorrelation-adjusted estimate of the sequence variance. 
+    autocorrelation-adjusted estimate of the sequence variance.
 
     NOTE: the backend argument defaults to estimating the effective_size in
     python. But, the statsmodels.tsa.AR required for the spectral density
@@ -420,10 +420,10 @@ def effective_size(model=None, trace=None, chain=None, varnames=None,
                 an array indexed by (m,n[,p]) containing m parallel runs of n samples
                 of p covariates.
     varnames:   str or list of str
-                set of variates to extract from the model or trace to to compute the 
-                statistic. 
+                set of variates to extract from the model or trace to to compute the
+                statistic.
     use_R   :   bool (default: False)
-                option to drop the computation of the effective size down to R's CODA 
+                option to drop the computation of the effective size down to R's CODA
                 package. Requires: rpy2, working R installation, CODA R package
     """
     trace = _resolve_to_trace(model, trace, chain, varnames)
@@ -440,7 +440,7 @@ def _effective_size(x, use_R=False):
                 flat vector of values to compute the effective sample size
 
     use_R   :   bool
-                option to use rpy2+CODA or pure python implementation. If False, 
+                option to use rpy2+CODA or pure python implementation. If False,
                 the effective size computation may be unbearably slow on large data,
                 due to slow AR fitting in statsmodels.
     """
@@ -489,7 +489,7 @@ def hpd_interval(model = None,  trace = None,  chain = None,  varnames = None,  
     trace = _resolve_to_trace(model, trace, chain, varnames)
     stats = trace.map(_hpd_interval, p=p)
     return stats if len(stats) > 1 else stats[0]
-    
+
 def _hpd_interval(data, p=.95):
     """
 
@@ -689,7 +689,8 @@ def _resolve_to_trace(model, trace, chain, varnames):
     passed arguments to a trace that can be used for analysis based on names
     in varnames.
 
-    If `trace` is passed, it is subset according to `varnames`, and a copy returned. It takes precedence.
+    If `trace` is passed, it is subset according to `varnames`, and a copy returned.
+    It takes precedence.
     Otherwise, if `model` is passed, its traces are taken.
     Finally, if `chain` is passed, a trace is constructed to structure the chain.
     In all cases, if `varnames` is passed, it is used to name or subset the given data.
@@ -702,25 +703,35 @@ def _resolve_to_trace(model, trace, chain, varnames):
     if isinstance(varnames, str):
         varnames = [varnames]
     if trace is not None:
-        if varnames is not None:
-            return trace.drop(*[var for var in trace.varnames
-                                if var not in varnames], inplace=False)
+        if isinstance(trace, Trace):
+            if varnames is not None:
+                return trace.drop(*[var for var in trace.varnames
+                                    if var not in varnames], inplace=False)
+            else:
+                return copy.deepcopy(trace)
         else:
-            return copy.deepcopy(trace)
+            return Trace(*_copy_hashmaps(_maybe_hashmap(trace)[0]))
+
     if model is not None:
         return _resolve_to_trace(model=None, trace=model.trace,
                                  chain=None, varnames=varnames)
     if chain is not None:
-        if chain.ndim > 1:
+        if chain.ndim > 2:
             m, n = chain.shape[0:2]
             rest = chain.shape[2:]
             new_p = np.multiply(*rest)
             chain = chain.reshape(m, n, new_p)
+        elif chain.ndim == 1:
+            if varnames is None:
+                varnames = ['parameter_0']
+            elif isinstance(varnames, list):
+                varnames = varnames[0]
+            return Trace(Hashmap(**dict([(varnames[0], chain)])))
         if varnames is None:
-            varnames = ['parameter_{}'.format(i) for i in new_p]
+            varnames = ['parameter_{}'.format(i) for i in range(len(chain))]
         else:
             if len(varnames) != new_p:
                 raise NotImplementedError('Parameter Subsetting by varnames '
                                           'is not currenlty implented for raw arrays')
-        return Trace([Hashmap({k: run.T[p] for p, k in enumerate(varnames)})
+        return Trace(*[Hashmap(**{k: run.T[p] for p, k in enumerate(varnames)})
                       for run in chain])
