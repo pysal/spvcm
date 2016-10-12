@@ -10,6 +10,9 @@ try:
     import readline  # hack to work around a conda bug
     from rpy2.rinterface import RRuntimeError
     from rpy2.robjects.packages import importr
+    from rpy2.robjects.numpy2ri import numpy2ri
+    import rpy2.robjects as ro
+    ro.conversion.py2ri = numpy2ri
     _coda = importr('coda')
     HAS_CODA = True
     HAS_RPY2 = True

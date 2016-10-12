@@ -7,7 +7,7 @@ import pandas as pd
 import os
 
 from .sqlite import head_to_sql, start_sql
-from .plotting.traces import plot_trace
+from .plotting import plot_trace
 from collections import OrderedDict
 
 ######################
@@ -71,7 +71,7 @@ class Sampler_Mixin(object):
             head_to_sql(self, self._cur, self._cxn)
             for param in self.traced_params:
                 self.trace[param] = [getattr(self.trace, param)[-1]]
-    
+
     def _parallel_sample(self, n_samples, n_jobs):
         """
         Run n_jobs parallel samples of a given model
@@ -129,31 +129,31 @@ class Sampler_Mixin(object):
 
     def _finalize(self, **args):
         raise NotImplementedError
-    
+
     def _setup_priors(self, **args):
         raise NotImplementedError
-    
+
     def _setup_truncation(self, **args):
         raise NotImplementedError
-    
+
     def _setup_starting_values(self, **args):
         raise NotImplementedError
 
     @property
     def database(self):
         return getattr(self, '_db', None)
-        
+
     @database.setter
     def database(self, filename):
         self._cxn, self._cur = start_sql(self, tracename=filename)
         self._db = filename
-    
+
 def _reflexive_sample(tup):
     """
     a helper function sample a bunch of models in parallel.
-    
+
     Tuple must be:
-    
+
     model : model object
     n_samples : int number of samples
     seed : seed to use for the sampler
@@ -204,7 +204,7 @@ class Hashmap(dict):
     def __delitem__(self, key):
         super(Hashmap, self).__delitem__(key)
         del self.__dict__[key]
-        
+
 class Trace(object):
     def __init__(self, *chains, **kwargs):
         if chains is () and kwargs != dict():
@@ -214,7 +214,7 @@ class Trace(object):
             if kwargs != dict():
                 self.chains.extend(_maybe_hashmap(kwargs))
         self._validate_schema()
-    
+
     @property
     def varnames(self, chain=None):
         try:
@@ -230,7 +230,7 @@ class Trace(object):
                     return list(self.chains[chain].keys())
             self._varnames = list(self.chains[0].keys())
             return self._varnames
-    
+
     def drop(self, *varnames, inplace=True):
         if not inplace:
             new = copy.deepcopy(self)
@@ -257,12 +257,12 @@ class Trace(object):
     def add_chain(self, *chains, validate=True):
         """
         Add chains to a trace object
-        
+
         Parameters
         ----------
         chains  :   Hashmap
-                    
-        
+
+
         """
         new_chains = [self.chains]
         for chain in chains:
@@ -278,7 +278,7 @@ class Trace(object):
 
     def map(self, func, **func_args):
         """
-        Map a function over all parameters in a chain. 
+        Map a function over all parameters in a chain.
         Multivariate parameters are reduced to sequences of univariate parameters.
 
         Usage
@@ -293,11 +293,11 @@ class Trace(object):
 
         trace['Betas', -1000::2].mean(axis=0).mean(axis=0)
 
-        since the first reduction provides an array where rows 
-        are iterations and columns are parameters. 
-        
+        since the first reduction provides an array where rows
+        are iterations and columns are parameters.
+
         trace.map(np.mean) yields the mean of each parameter within each chain, and is
-        provided to make within-chain reductions easier. 
+        provided to make within-chain reductions easier.
 
         Arguments
         ---------
@@ -329,7 +329,7 @@ class Trace(object):
                 these_stats.update({var:stats})
             all_stats.append(these_stats)
         return all_stats
-            
+
     @property
     def n_chains(self):
         return len(self.chains)
@@ -341,12 +341,12 @@ class Trace(object):
             return lengths[0]
         else:
             return lengths
-    
+
     def plot(self, burn=0, thin=None, varnames=None,
              kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
         """
         Make a trace plot paired with a distributional plot.
-    
+
         Arguments
         -----------
         trace   :   namespace
@@ -361,7 +361,7 @@ class Trace(object):
                      dictionary of aesthetic arguments for the kde plot
         trace_kwargs : dictionary
                        dictinoary of aesthetic arguments for the traceplot
-    
+
         Returns
         -------
         figure, axis tuple, where axis is (len(varnames), 2)
@@ -371,7 +371,7 @@ class Trace(object):
                       kde_kwargs=kde_kwargs, trace_kwargs=trace_kwargs,
                       figure_kwargs=figure_kwargs)
         return f,ax
-   
+
     def summarize(self, level=0):
         from .diagnostics import summarize
         return summarize(trace=self, level=level)
@@ -497,14 +497,14 @@ class Trace(object):
                         return Hashmap(**{varname:_ifilter(iters, chains[0][varname]) for varname in varnames})
         else:
             raise IndexError('index not understood')
-        
+
         result = np.asarray(result)
         if result.shape == ():
             result = result.tolist()
         elif result.shape in [(1,1), (1,)]:
             result = result[0]
         return result
-    
+
     ##############
     # Comparison #
     ##############
@@ -515,14 +515,14 @@ class Trace(object):
         else:
             a = [ch1==ch2 for ch1,ch2 in zip(other.chains, self.chains)]
             return all(a)
-            
+
     def _allclose(self, other, **allclose_kw):
         try:
             self._assert_allclose(other, **allclose_kw)
         except AssertionError:
             return False
         return True
-    
+
     def _assert_allclose(self, other, **allclose_kw):
         ignore_shape = allclose_kw.pop('ignore_shape', False)
         squeeze = allclose_kw.pop('squeeze', True)
@@ -546,12 +546,12 @@ class Trace(object):
                     A = v
                     B = ch2[k]
                 np.testing.assert_allclose(A,B,**allclose_kw)
-                    
+
 
     ###################
     # IO and Exchange #
     ###################
-    
+
     def to_df(self):
         """
         Convert the trace object to a Pandas Dataframe
@@ -588,7 +588,7 @@ class Trace(object):
     def to_csv(self, filename, **pandas_kwargs):
         """
         Write trace out to file, going through Trace.to_df()
-        
+
         If there are multiple chains in this trace, this will write
         them each out to 'filename_number.csv', where `number` is the
             number of the trace.
@@ -602,7 +602,7 @@ class Trace(object):
                 df.to_csv(name + '_' + str(i) + ext, **pandas_kwargs)
         else:
             dfs.to_csv(filename, **pandas_kwargs)
-    
+
     @classmethod
     def from_df(cls, *dfs, varnames=None, combine_suffix='_'):
         """
@@ -643,7 +643,7 @@ class Trace(object):
                 targets = [vec for vec in df[cols].values]
             out.update({stem:targets})
         return cls(**out)
-    
+
     @classmethod
     def from_pymc3(cls, pymc3trace):
         try:
@@ -653,7 +653,7 @@ class Trace(object):
                               "pymc3 is used for this feature. Pymc3 "
                               "failed to import.")
         return cls.from_df(mc.trace_to_dataframe(pymc3trace))
-    
+
     @classmethod
     def from_csv(cls, filename=None, multi=False,
                       varnames=None, combine_suffix='_', **pandas_kwargs):
@@ -681,7 +681,7 @@ class Trace(object):
             return cls.from_df(df, varnames=varnames,
                                combine_suffix=combine_suffix)
 
-            
+
 ####################
 # HELPER FUNCTIONS #
 ####################

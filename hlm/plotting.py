@@ -1,7 +1,8 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-from .. import diagnostics as diag
+import pandas as pd
+
 def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
                kde_kwargs={}, trace_kwargs={}, figure_kwargs={}):
     """
@@ -68,7 +69,7 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
                 sns.kdeplot(this_param, ax=ax[i,1], **kde_kwargs)
             ax[i,0].plot(this_param, **trace_kwargs)
             ax[i,1].set_title(param_name)
-            ax[i,0].set_xbound(0, len(this_param[burn::thin]))
+            ax[i,0].set_xbound(0, len(this_param))
     fig.tight_layout()
     return fig, ax
 
@@ -108,6 +109,7 @@ def seplot(model=None, trace=None, chain=None, varnames=None,
     --------
     figure,axis tuple or, if ax is passed, ax
     """
+    from . import diagnostics as diag
     trace = diag._resolve_to_trace(model, trace, chain, varnames)
 
     thin = 1 if thin is None else thin
@@ -176,6 +178,7 @@ def rollplot(model=None, trace=None, chain=None, varnames=None,
     --------
     figure,axis tuple or, if ax is passed, ax
     """
+    from . import diagnostics as diag
 
     trace = diag._resolve_to_trace(model, trace, chain, varnames)
 
@@ -242,6 +245,8 @@ def conv_plot(model=None, trace=None, chain=None, varnames=None,
     figure,axis tuple or, if ax is passed, ax
 
     """
+    from . import diagnostics as diag
+
     trace = diag._resolve_to_trace(model, trace, chain, varnames)
 
     thin = 1 if thin is None else thin
@@ -300,6 +305,49 @@ def _se_vector(x, N_bins):
     ----------
     N_bins-length vector containing whose element i contains the standard error of the x[:i+1] chunk.
     """
+    from . import diagnostics as diag
+
     splits = np.array_split(x, N_bins)
     diags = [list(diag.mcse(chain=np.hstack(splits[:i+1])).values())[0] for i in range(N_bins)]
     return diags
+
+def corrplot(m, burn=0, thin=None,
+             percentiles=[25,50,75], support=np.linspace(.001,1,num=1000),
+             figure_kw=None, plot_kw=None, kde_kw=None):
+    if figure_kw is None:
+        figure_kw = {'figsize':(2.1*8,8), 'sharey':True}
+
+    if plot_kw is None:
+        plot_kw = [dict()]*len(percentiles)
+    elif isinstance(plot_kw, dict):
+        plot_kw = [plot_kw]*len(percentiles)
+    elif isinstance(plot_kw, list):
+        assert len(plot_kw)==len(percentiles)
+
+    if kde_kw is None:
+        kde_kw = [{'vertical':True, 'shade':True}]*len(percentiles)
+    elif isinstance(kde_kw, dict):
+        kde_kw = [kde_kw]*len(percentiles)
+    elif isinstance(kde_kw, list):
+        assert len(kde_kw)==len(percentiles)
+
+    corrfunc = m.state.correlation_function
+    pwds = m.state.pwds
+    if m.trace.n_chains > 1:
+        raise
+    phis = m.trace['Phi', burn::thin]
+    f,ax = plt.subplots(1,2, **figure_kw)
+    support = np.linspace(.001,1,num=1000)
+    ptiles = [[np.percentile(corrfunc(r, pwds).flatten(), ptile)
+               for r in support] for ptile in percentiles]
+    empirical_median_correlation = [np.median(corrfunc(phi, pwds)) for phi in phis]
+    for i, ptile in enumerate(ptiles):
+        ax[0].plot(support*m.state.max_dist, ptile, **plot_kw[i])
+    sns.kdeplot(np.asarray(empirical_median_correlation), ax=ax[1], **kde_kw[i])
+    ax[0].set_title('Percentile of Correlation')
+    ax[1].set_title('Median spatial correlations')
+    ax[1].set
+    ax[0].set_ybound(0,1)
+    ax[0].set_xlabel('Distance')
+    ax[0].set_ylabel('Inter-Observation $\\rho$')
+    return f,ax
