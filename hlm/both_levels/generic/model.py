@@ -6,13 +6,12 @@ import copy
 
 from numpy import linalg as la
 from warnings import warn as Warn
-from pysal.spreg.utils import sphstack, spdot
-from .sample import sample_spatial, logp_rho, logp_lambda
+from .sample import logp_rho, logp_lambda
 from ...abstracts import Sampler_Mixin, Hashmap, Trace
 from ... import verify
 from ... steps import Metropolis, Slice
 from ... import priors
-from ...utils import speigen_range, splogdet, ind_covariance, chol_mvn
+from ...utils import speigen_range, ind_covariance, chol_mvn
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda', 'Rho']
 
@@ -29,6 +28,7 @@ class Base_Generic(Sampler_Mixin):
                  starting_values=None,
                  configs=None,
                  truncation=None):
+        super(Base_Generic, self).__init__()
         
         N, p = X.shape
         _N, J = Delta.shape

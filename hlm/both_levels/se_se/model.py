@@ -1,4 +1,4 @@
-from ..generic import Generic, Base_Generic
+from ..generic import Base_Generic
 from ...utils import se_covariance
 from ... import verify
 import numpy as np

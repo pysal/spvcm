@@ -58,7 +58,7 @@ def metropolis(state, current, proposal, logp, jump):
     new_logp = logp(state, new_val)
     forwards = proposal.logpdf(new_val, loc=current, scale=jump)
     backward = proposal.logpdf(current, loc=new_val, scale=jump)
-    
+
     hastings_factor = backward - forwards
     r = new_logp - current_logp + hastings_factor
     

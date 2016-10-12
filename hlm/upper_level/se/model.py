@@ -1,9 +1,7 @@
 from __future__ import division
-from warnings import warn
-import numpy as np
+
 import copy
 import scipy.stats as stats
-import scipy.sparse as spar
 import numpy as np
 import numpy.linalg as la
 

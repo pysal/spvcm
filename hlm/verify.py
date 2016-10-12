@@ -42,19 +42,16 @@ def center(*arrays, axis=0):
     """
     This centers the arrays provided along the axis provided.
     """
-    out =  [(array - array.mean(axis=axis)) for array in arrays]
-    if len(out) == 1:
-        return out[0]
-    return out
+    out = [(array - array.mean(axis=axis)) for array in arrays]
+    return out if len(out) > 1 else out[0]
 
 def scale(*arrays, axis=0):
     """
     This scales covariates by their standard deviation along the axis provided.
     """
     out = [array/array.std(axis=axis) for array in arrays]
-    if len(out) == 1:
-        return out[0]
-    return out
+    return out if len(out) > 1 else out[0]
+
 
 def Delta_members(Delta, membership, N, J):
     """
