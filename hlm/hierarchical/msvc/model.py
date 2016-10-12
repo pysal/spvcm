@@ -1,4 +1,5 @@
 from __future__ import division
+import warnings 
 import numpy as np
 import copy
 import scipy.linalg as scla
@@ -6,7 +7,7 @@ import scipy.sparse as spar
 from scipy import stats
 from scipy.spatial import distance as d
 from .utils import explode_stack, nexp
-from .sample import logp_phi_j
+from .sample import logp_phi_j_lu as logp_phi_j
 from ...abstracts import Sampler_Mixin, Trace, Hashmap
 from ...steps import Metropolis, Slice
 from ...utils import chol_mvn
@@ -26,22 +27,6 @@ class MSVC(Sampler_Mixin):
                  correlation_function=nexp,
                  dmetric='euclidean',
                  verbose=False):
-                 #tau2_a0=2, tau2_b0=1, mus_mean0=0, mus_cov0=None,
-                 #gammas_mean0=None, gammas_cov0=None,
-                 #phis_scale0_list=None, phis_rate0_list=None,
-                 #sigma2s_a0_list=None, sigma2s_b0_list=None,
-                 ##sampler starting values
-                 #phis_start=None, sigma2s_start=None,
-                 #mus_start=None, gammas_start=None,
-                 #zetas_start=None, tau2_start = None,
-                 ##Metropolis sampling parameters
-                 #tuning=0,
-                 #phi_jump=5, phi_adapt_step= 1.001,
-                 #phi_ar_low=.4, phi_ar_hi=.6,
-                 #phi_proposal=stats.norm,
-                 ##additional configuration parameters
-                 #extra_traced_params = None, dmetric='euclidean', verbose=False,
-                 #correlation_function=nexp,
                  #**kwargs):
         super(MSVC, self).__init__()
         if X is None and Z is None:
@@ -103,7 +88,7 @@ class MSVC(Sampler_Mixin):
             try:
                 self.sample(n_samples, n_jobs=n_jobs)
             except (np.linalg.LinAlgError, ValueError) as e:
-                Warn('Encountered the following LinAlgError. '
+                warnings.warn('Encountered the following LinAlgError. '
                      'Model will return for debugging. \n {}'.format(e))
 
     def _setup_priors(self, Tau2_a0 = .001, Tau2_b0 = .001,
@@ -169,7 +154,7 @@ class MSVC(Sampler_Mixin):
         elif Phi_method.lower().startswith('slice'):
             method = Slice
         else:
-            raise Exception('`Phi_method` option not understood. `{}` provided'             .format(Phi_method))
+            raise Exception('`Phi_method` option not understood. `{}` provided'.format(Phi_method))
         if uncaught != dict() and Phi_configs is None:
             Phi_configs = [uncaught] * self.state.p
         elif Phi_configs is not None and uncaught == dict():
@@ -197,42 +182,53 @@ class MSVC(Sampler_Mixin):
         self.configs.Phis = [method('Phi_{}'.format(j), logp_phi_j, **confs)
                                 for j,confs in enumerate(Phi_configs)]
         
-    def _setup_starting_values(self, Phi_start_list = None, Sigma2_start_list=None,
-                                     Mus_start = None, Gammas_start=None,
-                                     Zetas_start = None, Tau2_start = 2):
+    def _setup_starting_values(self, Phi_list = None, Sigma2_list=None,
+                                     Mus = None, Gammas=None,
+                                     Zetas = None, Tau2 = 2):
         """
         set up initial values for the sampler
         """
         st = self.state
         
-        if Phi_start_list is None:
-            Phi_start_list = [3*Phi_shape0_i / phi_rate0_i
+        if Phi_list is None:
+            Phi_list = [3*Phi_shape0_i / phi_rate0_i
                             for Phi_shape0_i, phi_rate0_i
                             in zip(st.Phi_shape0_list, st.Phi_rate0_list)]
-        elif isinstance(Phi_start_list, (float, int)):
-            Phi_start_list = [Phi_start_list] * st.p
-        self.state.Phi_list = Phi_start_list
-        if Sigma2_start_list is None:
-            Sigma2_start_list = [1]*st.p
-        elif isinstance(Sigma2_start_list, (float,int)):
-            Sigma2_start_list = [Sigma2_start_list]*st.p
-        self.state.Sigma2_list = Sigma2_start_list
+        elif isinstance(Phi_list, (float, int)):
+            Phi_list = [Phi_list] * st.p
+        self.state.Phi_list = Phi_list
+        if Sigma2_list is None:
+            Sigma2_list = [1]*st.p
+        elif isinstance(Sigma2_list, (float,int)):
+            Sigma2_list = [Sigma2_list]*st.p
+        self.state.Sigma2_list = Sigma2_list
         
-        if Mus_start is None:
-            Mus_start = np.zeros((1,st.p))
-        self.state.Mus = Mus_start
+        if Mus is None:
+            Mus = np.zeros((1,st.p))
+        self.state.Mus = Mus
 
-        if Gammas_start is None and self.state._has_Z:
-            Gammas_start = np.zeros((st.pz, 1))
+        if Gammas is None and self.state._has_Z:
+            Gammas = np.zeros((st.pz, 1))
         elif not self.state._has_Z:
-            Gammas_start = 0
-        self.state.Gammas = Gammas_start
+            Gammas = 0
+        self.state.Gammas = Gammas
 
-        if Zetas_start is None:
-            Zetas_start = np.zeros((st.n * st.p, 1))
-        self.state.Zetas = Zetas_start
+        if Zetas is None:
+            Zetas = np.zeros((st.n * st.p, 1))
+        self.state.Zetas = Zetas
         
-        self.state.Tau2 = Tau2_start
+        self.state.Tau2 = Tau2
+        
+    def _fuzz_starting_values(self):
+        st = self.state
+        if st._has_Z:
+            st.Gammas += np.random.normal(0,5, size=st.Gammas.shape)
+        st.Mus += np.random.normal(0,5, size=st.Mus.shape)
+        st.Phi_list = [phi + np.random.uniform(0,10) for phi in st.Phi_list]
+        st.Sigma2_list = [sigma2 + np.random.uniform(0,10) for sigma2 in st.Sigma2_list]
+        st.Zetas += np.random.normal(0,5, size=st.Zetas.shape)
+        st.Tau2 += np.random.uniform(0,10)
+        
 
     def _finalize(self):
         st = self.state
@@ -255,14 +251,6 @@ class MSVC(Sampler_Mixin):
         st.XcZetas = st.Xc.dot(st.Zetas)
         st.H = scla.block_diag(*st.H_list)
         st.Hi = scla.block_diag(*st.Hi_list)
-
-    def _iteration_(self):
-        mu_beta(self.state)
-        tau(self.state)
-        zeta(self.state)
-        if self.state._has_Z:
-            gamma(self.state)
-        all_j(self.state)
 
     def _iteration(self):
         st = self.state

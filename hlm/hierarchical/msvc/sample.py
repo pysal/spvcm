@@ -165,18 +165,17 @@ def logp_phi_j(state, val, j=None):
         return -np.inf
     st = state
     Hj = state.correlation_function(val, state.pwds)
-    Hji = np.linalg.inv(Hj)
+    lu,p = scla.lu_factor(Hj)
     Zeta_j = st.Zeta_list[idx]
     Sigma2_j = st.Sigma2_list[idx]
     Phi_j = st.Phi_list[idx]
     c0_j = st.Phi_shape0_list[idx]
     d0_j = st.Phi_rate0_list[idx]
     
-    logdet = -.5*np.multiply(*np.linalg.slogdet(Hj))
+    logdet = -.5*np.sum(np.log(np.abs(lu.diagonal())))
     varterm = -(st.n / 2) * np.log(Sigma2_j)
     phiterm = (c0_j - 1) * np.log(Phi_j)
-    norm_kern = (-1/(2*Sigma2_j)
-                 * np.linalg.multi_dot((Zeta_j.T, Hji, Zeta_j)) )
+    kern = scla.lu_solve((lu,p), Zeta_j).T.dot(Zeta_j)
+    norm_kern = (-1/(2*Sigma2_j) * kern)
     gamma_kern = - Phi_j * d0_j
     return logdet + varterm + norm_kern + gamma_kern
-
