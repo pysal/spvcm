@@ -16,6 +16,7 @@ def logp_phi(state, phi):
     # matrices, H,T, of shapes n x n and p x p, respectively:
     # log(det(H kron T)) = log(det(H)^p * log(det(T)^n))
     # = log(det(H))*p + log(det(T))*n
+
     sgnH, logdetH = np.linalg.slogdet(st.H)
     sgnT, logdetT = np.linalg.slogdet(st.T)
     logdetH *= sgnH
@@ -28,7 +29,7 @@ def logp_phi(state, phi):
     normal_kernel = np.dot(Bmu.T, np.dot(kronHT_inv, Bmu)) * -.5
     gamma_kernel = np.log(phi)*(st.Phi_shape0 - 1) + -1*st.Phi_rate0*phi
     return -.5*logdet + normal_kernel + gamma_kernel
-    
+
 def sample_phi(SVCP):
     """
     Sample phi, conditional on the state contained in the SVCP sampler

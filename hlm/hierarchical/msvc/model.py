@@ -1,5 +1,5 @@
 from __future__ import division
-import warnings 
+import warnings
 import numpy as np
 import copy
 import scipy.linalg as scla
@@ -7,10 +7,11 @@ import scipy.sparse as spar
 from scipy import stats
 from scipy.spatial import distance as d
 from .utils import explode_stack, nexp
-from .sample import logp_phi_j_lu as logp_phi_j
+from .sample import logp_phi_j
 from ...abstracts import Sampler_Mixin, Trace, Hashmap
 from ...steps import Metropolis, Slice
 from ...utils import chol_mvn
+from ... import verify
 
 class MSVC(Sampler_Mixin):
     """
@@ -26,19 +27,27 @@ class MSVC(Sampler_Mixin):
                  configs=None,
                  correlation_function=nexp,
                  dmetric='euclidean',
-                 verbose=False):
-                 #**kwargs):
+                 verbose=False,
+                 center=True,
+                 constant='local',
+                 rescale_dists=True):
         super(MSVC, self).__init__()
         if X is None and Z is None:
             raise UserWarning('At least one of X or Z must be provided.')
+
         if coordinates is None:
             raise UserWarning('Missing `coordinates` array, cannot fit.')
 
         self.state = Hashmap()
+        st = self.state
         self.traced_params = (['Gammas', 'Zetas', 'Mus',
                                 'Sigma2s', 'Phis', 'Tau2'])
         if Z is not None:
-            st.Z = Z - Z.mean()
+            if center:
+                Z = Z - Z.mean()
+            if constant.lower().startswith('gl') or constant.lower().startswith('bo'):
+                Z = verify_covariates(Z)
+            st.Z = Z
             st.pz = Z.shape[-1]
             self.state._has_Z = True
         else:
@@ -53,10 +62,19 @@ class MSVC(Sampler_Mixin):
         st = self.state
         self.state.correlation_function = correlation_function
         self.verbose = verbose
-        
-        n,p = X.shape
-        st.Y = Y - Y.mean()
-        st.X = X - X.mean(axis=0)
+
+
+        st.Y = Y
+        if X is None and (constant.lower().startswith('lo')
+                          or constant.lower().startswith('bo')):
+            X = np.ones_like(Y)
+        else:
+            if center:
+                X = verify.center(X)
+            if constant.lower().startswith('lo') or constant.lower().startswith('bo'):
+                X = verify.covariates(X)
+        st.X = X
+        n,p = st.X.shape
         st.Xc = explode_stack(st.X)
         st.n = n
         st.p = p
@@ -69,8 +87,11 @@ class MSVC(Sampler_Mixin):
             st.pwds = st._dmetric(st.coordinates)
 
         st.max_dist = st.pwds.max()
-        st.pwds = st.pwds/st.max_dist
-        
+        if rescale_dists:
+            st.pwds = st.pwds/st.max_dist
+            st._old_max = st.max_dist
+            st.max_dist = 1.
+
         if priors is None:
             priors = dict()
         if starting_values is None:
@@ -83,7 +104,7 @@ class MSVC(Sampler_Mixin):
         self._setup_configs(**configs)
         self._verbose = verbose
         self.cycles = 0
-        
+
         if n_samples > 0:
             try:
                 self.sample(n_samples, n_jobs=n_jobs)
@@ -99,15 +120,15 @@ class MSVC(Sampler_Mixin):
         st = self.state
         st.Tau2_a0 = Tau2_a0
         st.Tau2_b0 = Tau2_b0
-        
+
         if Mus_mean0 is None:
             Mus_mean0 = np.zeros((st.p, 1))
         if Mus_cov0 is None:
             Mus_cov0 = np.eye(st.p)
-        
+
         st.Mus_cov0 = Mus_cov0
         st.Mus_mean0 = Mus_mean0
-        
+
         if st._has_Z:
             if Gammas_mean0 is None:
                 Gammas_mean0 = np.zeros((st.pz, 1))
@@ -118,7 +139,7 @@ class MSVC(Sampler_Mixin):
             Gammas_mean0 = 0
         st.Gammas_cov0 = Gammas_cov0
         st.Gammas_mean0 = Gammas_mean0
-            
+
         if Phi_shape0_list is None:
             Phi_shape0_list = [1]*st.p
         elif isinstance(Phi_shape0_list, (float, int)):
@@ -132,19 +153,19 @@ class MSVC(Sampler_Mixin):
         elif isinstance(Phi_rate0_list, (float,int)):
             Phi_rate0_list = [Phi_rate0_list]*st.p
         st.Phi_rate0_list = Phi_rate0_list
-        
+
         if Sigma2_a0_list is None:
             Sigma2_a0_list = [2] * st.p
         elif isinstance(Sigma2_a0_list, (float,int)):
             Sigma2_a0_list = [Sigma2_a0_list]*st.p
         st.Sigma2_a0_list = Sigma2_a0_list
-        
+
         if Sigma2_b0_list is None:
             Sigma2_b0_list = [2]*st.p
         elif isinstance(Sigma2_b0_list, (float,int)):
             Sigma2_b0_list = [Sigma2_b0_list]*st.p
         st.Sigma2_b0_list = Sigma2_b0_list
-            
+
     def _setup_configs(self, Phi_method = 'met', Phi_configs=None, **uncaught):
         """
         Ensure that the sampling configuration is set accordingly.
@@ -177,11 +198,11 @@ class MSVC(Sampler_Mixin):
         else:
             raise Exception('Uncaught options {} passed in addition to '
                             '`Phi_configs` {}.'.format(uncaught, Phi_configs))
-        
+
         self.configs = Hashmap()
         self.configs.Phis = [method('Phi_{}'.format(j), logp_phi_j, **confs)
                                 for j,confs in enumerate(Phi_configs)]
-        
+
     def _setup_starting_values(self, Phi_list = None, Sigma2_list=None,
                                      Mus = None, Gammas=None,
                                      Zetas = None, Tau2 = 2):
@@ -189,7 +210,7 @@ class MSVC(Sampler_Mixin):
         set up initial values for the sampler
         """
         st = self.state
-        
+
         if Phi_list is None:
             Phi_list = [3*Phi_shape0_i / phi_rate0_i
                             for Phi_shape0_i, phi_rate0_i
@@ -202,7 +223,7 @@ class MSVC(Sampler_Mixin):
         elif isinstance(Sigma2_list, (float,int)):
             Sigma2_list = [Sigma2_list]*st.p
         self.state.Sigma2_list = Sigma2_list
-        
+
         if Mus is None:
             Mus = np.zeros((1,st.p))
         self.state.Mus = Mus
@@ -216,9 +237,9 @@ class MSVC(Sampler_Mixin):
         if Zetas is None:
             Zetas = np.zeros((st.n * st.p, 1))
         self.state.Zetas = Zetas
-        
+
         self.state.Tau2 = Tau2
-        
+
     def _fuzz_starting_values(self):
         st = self.state
         if st._has_Z:
@@ -228,7 +249,7 @@ class MSVC(Sampler_Mixin):
         st.Sigma2_list = [sigma2 + np.random.uniform(0,10) for sigma2 in st.Sigma2_list]
         st.Zetas += np.random.normal(0,5, size=st.Zetas.shape)
         st.Tau2 += np.random.uniform(0,10)
-        
+
 
     def _finalize(self):
         st = self.state
@@ -236,8 +257,9 @@ class MSVC(Sampler_Mixin):
         st.XtX = st.X.T.dot(st.X)
         st.XctXc = st.Xc.T.dot(st.Xc)
         if st._has_Z:
-            st.ZtZ = st.Z.T.dot(Z)
-        
+            st.ZtZ = st.Z.T.dot(st.Z)
+            st.ZGammas = st.Z.dot(st.Gammas)
+
         st.H_list = [st.correlation_function(phi, st.pwds)
                      for phi in st.Phi_list]
         st.Hi_list = [np.linalg.inv(Hj) for Hj in st.H_list]
@@ -258,7 +280,7 @@ class MSVC(Sampler_Mixin):
         #N(Sn.dot(Mn), Sn),
         #where Mn is Xt(Y - ZGammas - XcZetas)/Tau2 + S0^-1m0
         #and Sn is (XtX/Tau2 + S0^-1)^-1
-        
+
         Sni = st.XtX / st.Tau2 + st.Mus_cov0i
         Sn = np.linalg.inv(Sni)
         Mn = (st.X.T.dot(st.Y - st.ZGammas -  st.XcZetas)) / st.Tau2
@@ -274,7 +296,7 @@ class MSVC(Sampler_Mixin):
         st.eta = st.Y - st.XMus - st.XcZetas - st.ZGammas
         st.Tau2_bn = st.eta.T.dot(st.eta) / 2 + st.Tau2_b0
         st.Tau2 = stats.invgamma.rvs(st.Tau2_an, scale=st.Tau2_bn)
-        
+
         #The sample step for the full vector of local random effects, Zeta.
         #N(Sigma_zn.dot(zn), Sigma_zn)
         #where zn is Xc'(Y - ZGamma - XMu) / Tau2
@@ -285,7 +307,7 @@ class MSVC(Sampler_Mixin):
         st.Zetas = chol_mvn(Sigma_zn.dot(zn), Sigma_zn)
         st.XcZetas = st.Xc.dot(st.Zetas)
         st.Zeta_list = np.split(st.Zetas, st.p)
-        
+
         # The sample step for the global effects, gamma
         # N(Sigma_gn.dot(gn), Sigma_gn)
         #  where gn is Z'(Y - XMus - XcZetas)/Tau2 + S0g0
@@ -293,13 +315,13 @@ class MSVC(Sampler_Mixin):
         if st._has_Z:
             eta_MuZeta = st.Y - st.XMus - st.XcZetas
             gn = st.Z.T.dot(eta_MuZeta) / st.Tau2
-            st.gn += st.Gammas_cov0i.dot(st.Gammas_mean0)
-            
+            st.gn = gn + st.Gammas_cov0i.dot(st.Gammas_mean0)
+
             Sgni = st.ZtZ / st.Tau2 + st.Gammas_cov0i
             st.Sgn = np.linalg.inv(Sgni)
-            st.Gammas = chol_mvn(Sgn.dot(gn), Sgn)
+            st.Gammas = chol_mvn(st.Sgn.dot(st.gn), st.Sgn)
             st.ZGammas = st.Z.dot(st.Gammas)
-        
+
         for j, step in enumerate(self.configs.Phis):
             st.j = j
             st.update({'Phi_{}'.format(j):st.Phi_list[j]})
@@ -307,9 +329,9 @@ class MSVC(Sampler_Mixin):
             st.Phi_list[j] = step(self.state)
             st.H_list[j] = st.correlation_function(st.Phi_list[j], st.pwds)
             st.Hi_list[j] = np.linalg.inv(st.H_list[j])
-            
+
             ### Drawing sigma2 from its IG(a,b) posterior
-            
+
             Hj = st.H_list[j]
             Hji = st.Hi_list[j] #could we get this out of Zeta's Hi?
             Zeta_j = st.Zeta_list[j]
@@ -317,7 +339,7 @@ class MSVC(Sampler_Mixin):
             a0_j = st.Sigma2_a0_list[j]
             b0_j = st.Sigma2_b0_list[j]
             an_j = st.Sigma2_an_list[j]
-    
+
             bn_j = Zeta_j.T.dot(Hji).dot(Zeta_j) / 2 + b0_j
             st.Sigma2_list[j] = stats.invgamma.rvs(an_j, scale=bn_j)
 

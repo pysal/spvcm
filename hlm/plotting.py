@@ -44,7 +44,7 @@ def plot_trace(model, burn=0, thin=None, varnames=None, trace=None,
     elif isinstance(varnames, str):
         varnames = [varnames]
     if figure_kwargs == dict():
-        figure_kwargs = {'figsize':(1.6*6, 12), 'sharey':'row'}
+        figure_kwargs = {'figsize':(8, 2*len(varnames)), 'sharey':'row'}
     if kde_kwargs == dict():
         kde_kwargs = {'shade':True, 'vertical':True}
     if trace_kwargs == dict():

@@ -37,10 +37,10 @@ class Base_Lower_SMA(Base_Generic):
         for param in to_drop:
             for i, _  in enumerate(self.trace.chains):
                 del self.trace.chains[i][param]
-        
+
         self.state.Psi_1 = sma_covariance
         self.state.Psi_2 = ind_covariance
-        
+
         if n_samples > 0:
             try:
                 self.sample(n_samples, n_jobs=n_jobs)
@@ -66,7 +66,7 @@ class Lower_SMA(Base_Lower_SMA):
         W,_ = verify.weights(W, None, transform=transform)
         self.W = W
         Wmat = W.sparse
-        
+
         N,_ = X.shape
         if Delta is not None:
             J = Delta.shape[1]
@@ -78,9 +78,9 @@ class Lower_SMA(Base_Lower_SMA):
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
         if center:
-            Y,X = verify.center(Y,X)
+            X = verify.center(X)
         if scale:
-            Y,X = verify.scale(Y,X)
+            X = verify.scale(X)
 
         X = verify.covariates(X)
 

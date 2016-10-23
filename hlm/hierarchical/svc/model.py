@@ -8,6 +8,7 @@ from scipy.spatial import distance as d
 from .utils import explode, nexp
 from .sample import sample_phi, logp_phi
 from ...abstracts import Sampler_Mixin, Trace, Hashmap
+from ... import verify
 from ...utils import chol_mvn
 from ...steps import Metropolis, Slice
 
@@ -46,10 +47,16 @@ class SVC(Sampler_Mixin):
                  extra_traced_params = None,
                  dmetric='euclidean',
                  correlation_function=nexp,
-                 verbose=False):
+                 verbose=False,
+                 center=True,
+                 rescale_dists=True):
+        if center:
+            X = verify.center(X)
+        X = verify.covariates(X)
+
         N,p = X.shape
         Xs = X
-        
+
         X = explode(X)
         self.state = Hashmap(X=X, Y=Y, coordinates=coordinates)
         self.traced_params = ['Betas', 'Mus', 'T', 'Phi', 'Tau2']
@@ -59,14 +66,14 @@ class SVC(Sampler_Mixin):
         st = self.state
         self.state.correlation_function = correlation_function
         self.verbose = verbose
-        
+
 
         st.Y = Y
         st.X = X
         st.Xs = Xs
         st.N = N
         st.p = p
-       
+
         st._dmetric = dmetric
         if isinstance(st._dmetric, str):
             st.pwds = d.squareform(d.pdist(st.coordinates, metric=st._dmetric))
@@ -74,7 +81,10 @@ class SVC(Sampler_Mixin):
             st.pwds = st._dmetric(st.coordinates)
 
         st.max_dist = st.pwds.max()
-        st.pwds = st.pwds/st.max_dist
+        if rescale_dists:
+            st.pwds = st.pwds/st.max_dist
+            st._old_max = st.max_dist
+            st.max_dist = 1.
 
         if configs is None:
             configs = dict()
@@ -86,10 +96,10 @@ class SVC(Sampler_Mixin):
         self._setup_priors(**priors)
         self._setup_starting_values(**starting_values)
         self._setup_configs(**configs)
-        
+
         self._verbose = verbose
         self.cycles = 0
-        
+
         if n_samples > 0:
             try:
                 self.sample(n_samples, n_jobs=n_jobs)
@@ -97,7 +107,7 @@ class SVC(Sampler_Mixin):
                 Warn('Encountered the following LinAlgError. '
                      'Model will return for debugging. \n {}'.format(e))
 
-    def _setup_priors(self, Tau2_a0=.0001, Tau2_b0=.0001,
+    def _setup_priors(self, Tau2_a0=.001, Tau2_b0=.001,
                             T_v0 = 3, T_Omega0=None,
                             Mus_mean0 = None, Mus_cov0=None,
                             Phi_shape0=1, Phi_rate0=None):
@@ -126,7 +136,7 @@ class SVC(Sampler_Mixin):
                                      Mus=None, Betas=None, Tau2=2):
         """
         Setup initial values of the sampler for parameters
-        
+
         Defaults
         ---------
         Phi     : 3*shape/rate for the parameter by default.
@@ -147,7 +157,7 @@ class SVC(Sampler_Mixin):
             Phi = 3*self.state.Phi_shape0 / self.state.Phi_rate0
         self.state.Phi = Phi
         self.state.Tau2=Tau2
-    
+
     def _setup_configs(self, Phi_method = 'met', Phi_configs=None, **uncaught):
         """
         Setup Configs of the MCMC sampled parameters in the model.
@@ -173,7 +183,7 @@ class SVC(Sampler_Mixin):
         else:
             raise Exception('Uncaught options {} passed in addition to '
                             '`Phi_configs` {}.'.format(uncaught, Phi_configs))
-        
+
         self.configs = Hashmap()
         self.configs.Phi = method('Phi', logp_phi, **Phi_configs)
 
@@ -197,7 +207,7 @@ class SVC(Sampler_Mixin):
         st.Mus_kernel_prior = np.dot(st.Mus_cov0i, st.Mus_mean0)
         st.Tau2_an = st.Tau2_a0 + st.N/2.
         st.T_vn = st.T_v0 + st.N
-        
+
     def _fuzz_starting_values(self):
         super(SVC, self)._fuzz_starting_values()
         self.state.Phi += np.random.uniform(0,10)
@@ -210,7 +220,7 @@ class SVC(Sampler_Mixin):
         provided.
         """
         st = self.state
-        
+
         ## Tau, EQ 3 in appendix of Wheeler & Calder
         ## Inverse Gamma w/ update to scale, no change to dof
         y_Xbeta = st.Y - st.X.dot(st.Betas)
@@ -236,29 +246,29 @@ class SVC(Sampler_Mixin):
         Psi_inv = scla.inv(st.Psi)
         S_notinv_update = np.linalg.multi_dot((st.Xs.T, Psi_inv, st.Xs))
         S = scla.inv(st.Mus_cov0i + S_notinv_update)
-        
+
         #compute location of mu_\betas
         mkernel_update = np.linalg.multi_dot((st.Xs.T, Psi_inv, st.Y))
         st.Mus_mean = np.dot(S, (mkernel_update + st.Mus_kernel_prior))
-        
+
         #draw them using cholesky decomposition: N(m, Sigma) = m + chol(Sigma).N(0,1)
         st.Mus = chol_mvn(st.Mus_mean, S)
         st.tiled_Mus = np.kron(st.iota_n, st.Mus)
 
         ##effects \beta, in equation 6 of Wheeler & Calder
         ##Normal with an update to both scale and location, priors don't change
-        
+
         #compute scale of betas
         st.Tinv = scla.inv(st.T)
         st.kronHiTi = np.kron(st.Hinv, st.Tinv)
         Ai = st.XtX / st.Tau2 + st.kronHiTi
         A = scla.inv(Ai)
-        
+
         #compute means of betas
         C = st.Xty / st.Tau2 + np.dot(st.kronHiTi, st.tiled_Mus)
         st.Betas_means = np.dot(A, C)
         st.Betas_cov = A
-        
+
         #draw them using cholesky decomposition
         st.Betas = chol_mvn(st.Betas_means, st.Betas_cov)
 

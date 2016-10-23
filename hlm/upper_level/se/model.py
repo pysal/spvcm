@@ -52,7 +52,7 @@ class Base_Upper_SE(Base_Generic):
 
     def _iteration(self):
         st = self.state
-    
+
         ### Sample the Beta conditional posterior
         ### P(beta | . ) \propto L(Y|.) \dot P(\beta)
         ### is
@@ -62,14 +62,14 @@ class Base_Upper_SE(Base_Generic):
         covm_update = st.X.T.dot(st.X) / st.Sigma2
         covm_update += st.Betas_cov0i
         covm_update = la.inv(covm_update)
-    
+
         resids = st.Y - st.Delta.dot(st.Alphas)
         XtSresids = st.X.T.dot(resids) / st.Sigma2
         mean_update = XtSresids + st.Betas_cov0i.dot(st.Betas_mean0)
         mean_update = np.dot(covm_update, mean_update)
         st.Betas = chol_mvn(mean_update, covm_update)
         st.XBetas = np.dot(st.X, st.Betas)
-    
+
         ### Sample the Random Effect conditional posterior
         ### P( Alpha | . ) \propto L(Y|.) \dot P(Alpha | \lambda, Tau2)
         ###                               \dot P(Tau2) \dot P(\lambda)
@@ -81,13 +81,13 @@ class Base_Upper_SE(Base_Generic):
         covm_update = st.Delta.T.dot(st.Delta) / st.Sigma2
         covm_update += st.PsiLambdai / st.Tau2
         covm_update = la.inv(covm_update)
-    
+
         resids = st.Y - st.XBetas
         mean_update = st.Delta.T.dot(resids) / st.Sigma2
         mean_update = np.dot(covm_update, mean_update)
         st.Alphas = chol_mvn(mean_update, covm_update)
         st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
-    
+
         ### Sample the Random Effect aspatial variance parameter
         ### P(Tau2 | .) \propto L(Y|.) \dot P(\Alpha | \lambda, Tau2)
         ###                            \dot P(Tau2) \dot P(\lambda)
@@ -95,7 +95,7 @@ class Base_Upper_SE(Base_Generic):
         ### IG(J/2 + a0, u'(\Psi(\lambda))^{-1}u * .5 + b0)
         bn = st.Alphas.T.dot(st.PsiLambdai).dot(st.Alphas) * .5 + st.Tau2_b0
         st.Tau2 = stats.invgamma.rvs(st.Tau2_an, scale=bn)
-        
+
         ### Sample the response aspatial variance parameter
         ### P(Sigma2 | . ) \propto L(Y | .) \dot P(Sigma2)
         ### is
@@ -104,7 +104,7 @@ class Base_Upper_SE(Base_Generic):
         eta = st.Y - st.XBetas - st.DeltaAlphas
         bn = eta.T.dot(eta) * .5 + st.Sigma2_b0
         st.Sigma2 = stats.invgamma.rvs(st.Sigma2_an, scale=bn)
-            
+
         ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho)
         ### is
         ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
@@ -143,12 +143,12 @@ class Upper_SE(Base_Upper_SE):
             Z = Delta.dot(Z)
             X = np.hstack((X,Z))
         if center:
-            Y,X = verify.center(Y,X)
+            X = verify.center(X)
         if scale:
-            Y,X = verify.scale(Y,X)
+            X = verify.scale(X)
 
         X = verify.covariates(X)
-            
+
         self._verbose = verbose
 
         super(Upper_SE, self).__init__(Y, X, Mmat, Delta,

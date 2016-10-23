@@ -9,16 +9,16 @@ from ...steps import metropolis
 def mu_beta(state):
     """
     The sample step for mu_beta in a multi-process SVCP. Results in a draw from:
-    
+
     N(Sn.dot(Mn), Sn),
-    
+
     where Mn is Xt(Y - ZGammas - XcZetas)/Tau2 + S0^-1m0
     and Sn is (XtX/Tau2 + S0^-1)^-1
-    
+
     modifies state.Mus and state.XMus inplace.
     """
     st = state
-    
+
     Sni = st.XtX / st.Tau2 + st.mu_cov0i
     Sn = np.linalg.inv(Sni)
     Mn = (st.X.T.dot(st.Y - st.ZGammas -  st.XcZetas)) / st.Tau2
@@ -30,11 +30,11 @@ def mu_beta(state):
 def tau(state):
     """
     The sample step for tau in a multi-process SVCP. Results in a draw from:
-    
+
     IG(an,bn)
     where an is n/2+a0
     and bn is (Y-XMus-XcZetas - ZGammas)**2/2 + b0, where **2 is the matrix square
-    
+
     modifies state.Tau2 inplace.
     """
     st = state
@@ -45,8 +45,8 @@ def tau(state):
 
 def zeta(state):
     """
-    
-    
+
+
     modifies state.Zetas, state.XcZetas, and state.Zeta_list inplace
     """
     st = state
@@ -60,24 +60,24 @@ def zeta(state):
 
 def gamma(state):
     """
-    
+
     modifies st.Gammas and st.ZGammas in place, if the state has Z.
     """
     st = state
     eta_muzeta = st.Y - st.XMus - st.XcZetas
     gn = st.Z.T.dot(eta_muzeta) / st.Tau2
     gn += st.gammas_cov0i.dot(st.gammas_mean0)
-    
+
     Sgni = st.ZtZ / st.Tau2 - st.gammas_cov0i
     Sgn = np.linalg.inv(Sgni)
     st.Gammas = chol_mvn(Sgn.dot(gn), Sgn)
     st.ZGammas = st.Z.dot(st.Gammas)
     return st.Gammas
-                           
+
 def all_j(state):
     """
     Sample each process
-    
+
     modifies Phi_list, H_list, Hi_list, Sigma2_list, H, Hi in place.
     """
     st = state
@@ -97,7 +97,7 @@ def all_j(state):
 def phi_j(state, idx):
     """
     The metropolis sample step for the `idx`th Phi value.
-    
+
     modifies configurations only inplace.
     """
     state.j = idx
@@ -105,13 +105,13 @@ def phi_j(state, idx):
     global_cfgs = state.configs
     this_cfg = global_cfgs.Phi[idx]
     current = state.Phi_list[idx]
-    
+
     try:
         proposal = this_cfg.proposal
     except KeyError:
         proposal = stats.normal
         this_cfg.proposal = proposal
-    
+
     new_val, accepted = metropolis(state, current, proposal,
                                    logp_phi_j, this_cfg.jump)
     if accepted:
@@ -133,7 +133,7 @@ def phi_j(state, idx):
 def sigma_j(state, idx):
     """
     The sample step for the `idx`th sigma2_j parameter.
-    
+
     modifies nothing inplace.
     """
     st = state
@@ -145,7 +145,7 @@ def sigma_j(state, idx):
     Phi_j = st.Phi_list[idx]
     a0_j = st.a0_list[idx]
     b0_j = st.b0_list[idx]
-    
+
     bjn = Zeta_j.T.dot(Hji).dot(Zeta_j) / 2 + b0_j
     new_sigma = stats.invgamma.rvs(st.an_list[idx], scale=bjn)
     return new_sigma
@@ -154,9 +154,10 @@ def logp_phi_j(state, val, j=None):
     """
     The logp for the current phi parameter, where `j` is
     either stored in state or passed as an argument.
-    
+
     modifies nothing inplace.
     """
+
     if j is None:
         idx = state.j
     else:
@@ -171,7 +172,8 @@ def logp_phi_j(state, val, j=None):
     Phi_j = st.Phi_list[idx]
     c0_j = st.Phi_shape0_list[idx]
     d0_j = st.Phi_rate0_list[idx]
-    
+
+
     logdet = -.5*np.sum(np.log(np.abs(lu.diagonal())))
     varterm = -(st.n / 2) * np.log(Sigma2_j)
     phiterm = (c0_j - 1) * np.log(Phi_j)
