@@ -53,17 +53,28 @@ def metropolis(state, current, proposal, logp, jump):
     new (or current) parameter value, and boolean indicating whether or not a
     new proposal was accepted.
     """
-    current_logp = logp(state, current)
-    new_val = proposal.rvs(loc=current, scale=jump)
-    new_logp = logp(state, new_val)
-    forwards = proposal.logpdf(new_val, loc=current, scale=jump)
-    backward = proposal.logpdf(current, loc=new_val, scale=jump)
+    try:
+        current_logp = logp(state, current)
+        new_val = proposal.rvs(loc=current, scale=jump)
+        new_logp = logp(state, new_val)
+        forwards = proposal.logpdf(new_val, loc=current, scale=jump)
+        backward = proposal.logpdf(current, loc=new_val, scale=jump)
 
-    hastings_factor = backward - forwards
-    r = new_logp - current_logp + hastings_factor
-    
-    r = np.min((1, np.exp(r)))
-    u = np.random.random()
+        hastings_factor = backward - forwards
+        r = new_logp - current_logp + hastings_factor
+        
+        r = np.min((0, r))
+        u = np.log(np.random.random())
+    except:
+        print(current)
+        print(new_val)
+        print(new_logp)
+        print(current_logp)
+        print(backward)
+        print(forwards)
+        print(r)
+        print(u)
+        raise
     
     if u < r:
         outval = new_val
@@ -179,7 +190,8 @@ class Metropolis(AbstractStep):
     """
     Sample the given Logp using metroplis sampling
     """
-    def __init__(self, varname, logp, jump = 1, proposal = stats.norm, adapt_step=1.01, ar_low = .4, ar_hi = .6, max_tuning = 0, debug=False):
+    def __init__(self, varname, logp, jump = 1, proposal = stats.norm, 
+                       adapt_step=1.01, ar_low = .2, ar_hi = .25, max_tuning = 0, debug=False):
         super(Metropolis, self).__init__(varname)
         self.jump = jump
         self.adapt_step = adapt_step if adapt_step >= 1 else 1/adapt_step
@@ -222,12 +234,15 @@ class Slice(AbstractStep):
     """
     Sample the given Logp using slice sampling, of Neal (2003).
     """
-    def __init__(self, varname, logp, width, adapt=0):
+    def __init__(self, varname, logp, width=1, adapt=0, debug=False):
         super(Slice, self).__init__(varname)
         self.logp = logp
         self.width = width
         self.adapt = adapt
-    
+        self.debug = debug
+        if debug:
+            self._cache = [] 
+
     @property
     def _idempotent(self):
         return True
@@ -236,4 +251,7 @@ class Slice(AbstractStep):
         new, _, width = slicer(state, getattr(state, self.varname),
                                self.logp, self.width, self.adapt)
         self.width = width
+        if self.debug:
+            self._cache.append(dict(width=self.width, 
+                                    logp = self.logp(state, new)))
         return new
