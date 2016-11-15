@@ -117,15 +117,15 @@ class Sampler_Mixin(object):
         if hasattr(st, 'Betas'):
             st.Betas += np.random.normal(0,5, size=st.Betas.shape)
         if hasattr(st, 'Alphas'):
-            self.state.Alphas += np.random.normal(0,5,size=st.Alphas.shape)
+            st.Alphas += np.random.normal(0,5,size=st.Alphas.shape)
         if hasattr(st, 'Sigma2'):
-            self.state.Sigma2 += np.random.uniform(0,5)
+            st.Sigma2 += np.random.uniform(0,5)
         if hasattr(st, 'Tau2'):
-            self.state.Tau2 += np.random.uniform(0,5)
+            st.Tau2 += np.random.uniform(0,5)
         if hasattr(st, 'Lambda'):
-            self.state.Lambda += np.random.uniform(-.5,.5)
+            st.Lambda += np.random.uniform(-.5,.5)
         if hasattr(st, 'Rho'):
-            self.state.Rho += np.random.uniform(-.5,.5)
+            st.Rho += np.random.uniform(-.5,.5)
 
     def _finalize(self, **args):
         raise NotImplementedError
