@@ -8,7 +8,8 @@ import numpy.linalg as la
 from ...both_levels.generic import Base_Generic
 from ...both_levels.generic.model import SAMPLERS as generic_parameters
 from ... import verify
-from ...utils import se_covariance, ind_covariance, splogdet, chol_mvn
+from ...utils import se_covariance, se_precision, ind_covariance, splogdet, chol_mvn
+from pysal.spreg.utils import spdot
 
 
 
@@ -35,7 +36,9 @@ class Base_Upper_SE(Base_Generic):
                                             starting_values=starting_values,
                                             truncation=truncation)
         self.state.Psi_1 = ind_covariance
+        self.state.Psi_1i = ind_covariance
         self.state.Psi_2 = se_covariance
+        self.state.Psi_2i = se_precision
         original_traced = copy.deepcopy(self.traced_params)
         to_drop = [k for k in original_traced if (k not in SAMPLERS and k in generic_parameters)]
         self.traced_params = copy.deepcopy(SAMPLERS)
@@ -80,11 +83,13 @@ class Base_Upper_SE(Base_Generic):
         ### b = (Delta'Sigma_Y^{-1}(Y - X\beta) + 0)
         covm_update = st.Delta.T.dot(st.Delta) / st.Sigma2
         covm_update += st.PsiLambdai / st.Tau2
+        covm_update = np.asarray(covm_update)
         covm_update = la.inv(covm_update)
 
         resids = st.Y - st.XBetas
         mean_update = st.Delta.T.dot(resids) / st.Sigma2
         mean_update = np.dot(covm_update, mean_update)
+        mean_update = np.asarray(mean_update)
         st.Alphas = chol_mvn(mean_update, covm_update)
         st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
 
@@ -93,7 +98,7 @@ class Base_Upper_SE(Base_Generic):
         ###                            \dot P(Tau2) \dot P(\lambda)
         ### is
         ### IG(J/2 + a0, u'(\Psi(\lambda))^{-1}u * .5 + b0)
-        bn = st.Alphas.T.dot(st.PsiLambdai).dot(st.Alphas) * .5 + st.Tau2_b0
+        bn = spdot(st.Alphas.T, spdot(st.PsiLambdai, st.Alphas)) * .5 + st.Tau2_b0
         st.Tau2 = stats.invgamma.rvs(st.Tau2_an, scale=bn)
 
         ### Sample the response aspatial variance parameter
@@ -109,8 +114,7 @@ class Base_Upper_SE(Base_Generic):
         ### is
         ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
         st.Lambda = self.configs.Lambda(st)
-        st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-        st.PsiLambdai = la.inv(st.PsiLambda)
+        st.PsiLambdai = st.Psi_2i(st.Lambda, st.M)
 
 class Upper_SE(Base_Upper_SE):
     """

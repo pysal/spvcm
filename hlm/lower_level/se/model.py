@@ -4,8 +4,9 @@ import numpy as np
 import copy
 
 from ...both_levels.generic import Base_Generic
+from ...both_levels.generic.sample import logp_rho_prec
 from ... import verify
-from ...utils import se_covariance, ind_covariance
+from ...utils import se_covariance, se_precision, ind_covariance, no_op
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Rho']
@@ -40,6 +41,10 @@ class Base_Lower_SE(Base_Generic):
 
         self.state.Psi_1 = se_covariance
         self.state.Psi_2 = ind_covariance
+        self.state.Psi_1i = se_precision
+        self.state.Psi_2i = ind_covariance #same as precision
+        self.configs.Rho.logp = logp_rho_prec
+        self.configs.Lambda = no_op 
 
         if n_samples > 0:
             try:

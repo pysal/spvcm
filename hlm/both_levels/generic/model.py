@@ -6,12 +6,13 @@ import copy
 
 from numpy import linalg as la
 from warnings import warn as Warn
-from .sample import logp_rho, logp_lambda
+from .sample import logp_rho_cov, logp_lambda_cov
 from ...abstracts import Sampler_Mixin, Hashmap, Trace
 from ... import verify
 from ... steps import Metropolis, Slice
 from ... import priors
 from ...utils import speigen_range, ind_covariance, chol_mvn
+from pysal.spreg.utils import spdot
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda', 'Rho']
 
@@ -56,7 +57,9 @@ class Base_Generic(Sampler_Mixin):
         
         ## Covariance, computing the starting values
         self.state.Psi_1 = ind_covariance
+        self.state.Psi_1i = ind_covariance
         self.state.Psi_2 = ind_covariance
+        self.state.Psi_2i = ind_covariance
         
         self.cycles = 0
         
@@ -111,16 +114,8 @@ class Base_Generic(Sampler_Mixin):
         st.Sigma2_an = self.state.N / 2 + st.Sigma2_a0
         st.Tau2_an = self.state.J / 2 + st.Tau2_a0
         
-        st.PsiRho = st.Psi_1(st.Rho, st.W)
-        st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-
-        st.PsiSigma2 = st.PsiRho.dot(st.In * st.Sigma2)
-        st.PsiSigma2i = la.inv(st.PsiSigma2)
-        st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
-        st.PsiTau2i = la.inv(st.PsiTau2)
-
-        st.PsiRhoi = la.inv(st.PsiRho)
-        st.PsiLambdai = la.inv(st.PsiLambda)
+        st.PsiRhoi = st.Psi_1i(st.Rho, st.W)
+        st.PsiLambdai = st.Psi_2i(st.Lambda, st.M)
         
         ## Data invariants
         st.XtX = np.dot(self.state.X.T, self.state.X)
@@ -128,6 +123,9 @@ class Base_Generic(Sampler_Mixin):
 
         st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
         st.XBetas = np.dot(st.X, st.Betas)
+            
+        st.initial_values = Hashmap(Betas = st.Betas, Alphas=st.Alphas, Rho=st.Rho, Lambda=st.Lambda,
+                                    Sigma2=st.Sigma2, Tau2=st.Tau2)
 
 
     def _setup_configs(self, Lambda_method = 'met', Lambda_configs = None,
@@ -149,30 +147,32 @@ class Base_Generic(Sampler_Mixin):
             Rho_configs = copy.deepcopy(uncaught)
 
         if Lambda_method.lower().startswith('met'):
-            method = Metropolis
+            Lambda_method = Metropolis
             Lambda_configs['jump'] = Lambda_configs.pop('jump', .5)
             Lambda_configs['max_tuning'] = Lambda_configs.pop('tuning',0)
         elif Lambda_method.lower().startswith('slice'):
-            method = Slice
+            Lambda_method = Slice
             Lambda_configs['width'] = Lambda_configs.pop('width', .5)
         else:
             raise Exception('Sample method for Lambda not understood:\n{}'
                             .format(Lambda_method))
         if Rho_method.lower().startswith('met'):
-            method = Metropolis
+            Rho_method = Metropolis
             Rho_configs['jump'] = Rho_configs.pop('jump', .5)
             Rho_configs['max_tuning'] = Rho_configs.pop('tuning',0)
 
         elif Rho_method.lower().startswith('slice'):
-            method = Slice
+            Rho_method = Slice
             Rho_configs['width'] = Rho_configs.pop('width', .5)
         else:
             raise Exception('Sample method for Rho not understood:\n{}'
                             .format(Rho_method))
+        print('Rho method, configs: {}'.format(Rho_method, Rho_configs))
+        print('Lambda method, configs: {}'.format(Lambda_method, Lambda_configs))
 
         self.configs = Hashmap()
-        self.configs.Rho = method('Rho', logp_rho, **Rho_configs)
-        self.configs.Lambda = method('Lambda', logp_lambda, **Lambda_configs)
+        self.configs.Rho = Rho_method('Rho', logp_rho_cov, **Rho_configs)
+        self.configs.Lambda = Lambda_method('Lambda', logp_lambda_cov, **Lambda_configs)
 
     def _setup_truncation(self, Rho_min=None, Rho_max = None,
                           Lambda_min = None, Lambda_max = None):
@@ -242,13 +242,15 @@ class Base_Generic(Sampler_Mixin):
         ### N(Sb, S) where
         ### S = (X' Sigma^{-1}_Y X + S_0^{-1})^{-1}
         ### b = X' Sigma^{-1}_Y (Y - Delta Alphas) + S^{-1}\mu_0
-        covm_update = st.X.T.dot(st.PsiRhoi).dot(st.X) / st.Sigma2
+        covm_update = spdot(st.X.T, spdot(st.PsiRhoi, st.X)) / st.Sigma2
         covm_update += st.Betas_cov0i
+        covm_update = np.asarray(covm_update)
         covm_update = la.inv(covm_update)
     
         resids = st.Y - st.Delta.dot(st.Alphas)
-        XtSresids = st.X.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
+        XtSresids = spdot(st.X.T, spdot(st.PsiRhoi, resids)) / st.Sigma2
         mean_update = XtSresids + st.Betas_cov0i.dot(st.Betas_mean0)
+        mean_update = np.asarray(mean_update)
         mean_update = np.dot(covm_update, mean_update)
         st.Betas = chol_mvn(mean_update, covm_update)
         st.XBetas = np.dot(st.X, st.Betas)
@@ -261,12 +263,14 @@ class Base_Generic(Sampler_Mixin):
         ### Where
         ### S = (Delta'Sigma_Y^{-1}Delta + Sigma_Alpha^{-1})^{-1}
         ### b = (Delta'Sigma_Y^{-1}(Y - X\beta) + 0)
-        covm_update = st.Delta.T.dot(st.PsiRhoi).dot(st.Delta) / st.Sigma2
+        covm_update = spdot(st.Delta.T, spdot(st.PsiRhoi, st.Delta)) / st.Sigma2
         covm_update += st.PsiLambdai / st.Tau2
+        covm_update = np.asarray(covm_update)
         covm_update = la.inv(covm_update)
     
         resids = st.Y - st.XBetas
-        mean_update = st.Delta.T.dot(st.PsiRhoi).dot(resids) / st.Sigma2
+        mean_update = spdot(st.Delta.T, spdot(st.PsiRhoi, resids)) / st.Sigma2
+        mean_update = np.asarray(mean_update)
         mean_update = np.dot(covm_update, mean_update)
         st.Alphas = chol_mvn(mean_update, covm_update)
         st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
@@ -276,7 +280,7 @@ class Base_Generic(Sampler_Mixin):
         ###                            \dot P(Tau2) \dot P(\lambda)
         ### is
         ### IG(J/2 + a0, u'(\Psi(\lambda))^{-1}u * .5 + b0)
-        bn = st.Alphas.T.dot(st.PsiLambdai).dot(st.Alphas) * .5 + st.Tau2_b0
+        bn = spdot(st.Alphas.T, spdot(st.PsiLambdai, st.Alphas)) * .5 + st.Tau2_b0
         st.Tau2 = stats.invgamma.rvs(st.Tau2_an, scale=bn)
         
         ### Sample the response aspatial variance parameter
@@ -285,7 +289,7 @@ class Base_Generic(Sampler_Mixin):
         ### IG(N/2 + a0, eta'Psi(\rho)^{-1}eta * .5 + b0)
         ### Where eta is the linear predictor, Y - X\beta + \DeltaAlphas
         eta = st.Y - st.XBetas - st.DeltaAlphas
-        bn = eta.T.dot(st.PsiRhoi).dot(eta) * .5 + st.Sigma2_b0
+        bn = spdot(eta.T, spdot(st.PsiRhoi, eta)) * .5 + st.Sigma2_b0
         st.Sigma2 = stats.invgamma.rvs(st.Sigma2_an, scale=bn)
     
         ### Sample the spatial components using metropolis-hastings
@@ -295,19 +299,14 @@ class Base_Generic(Sampler_Mixin):
         ###  * 1/(emax-emin)
         st.Rho = self.configs.Rho(st)
         
-        st.PsiRho = st.Psi_1(st.Rho, st.W)
-        st.PsiSigma2 = st.PsiRho.dot(st.In*st.Sigma2)
-        st.PsiSigma2i = la.inv(st.PsiSigma2)
-        st.PsiRhoi = la.inv(st.PsiRho)
+        st.PsiRhoi = st.Psi_1i(st.Rho, st.W) #BtB or CiCti
             
         ### P(Psi(\rho) | . ) \propto L(Y | .) \dot P(\rho)
         ### is
         ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
         st.Lambda = self.configs.Lambda(st)
-        st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-        st.PsiTau2 = st.PsiLambda.dot(st.Ij * st.Tau2)
-        st.PsiTau2i = la.inv(st.PsiTau2)
-        st.PsiLambdai = la.inv(st.PsiLambda)
+
+        st.PsiLambdai = st.Psi_2i(st.Lambda, st.M)
 
 class Generic(Base_Generic):
     """

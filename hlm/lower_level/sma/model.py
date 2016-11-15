@@ -5,7 +5,7 @@ import copy
 
 from ...both_levels.generic import Base_Generic
 from ... import verify
-from ...utils import sma_covariance, ind_covariance
+from ...utils import sma_covariance, ind_covariance, sma_precision, no_op
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Rho']
@@ -40,6 +40,10 @@ class Base_Lower_SMA(Base_Generic):
 
         self.state.Psi_1 = sma_covariance
         self.state.Psi_2 = ind_covariance
+        self.state.Psi_1i = sma_precision
+        self.state.Psi_2i = ind_covariance
+
+        self.configs.Lambda = no_op
 
         if n_samples > 0:
             try:

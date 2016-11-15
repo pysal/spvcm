@@ -1,5 +1,6 @@
 from ..generic import Base_Generic
-from ...utils import se_covariance, sma_covariance
+from ..generic.sample import logp_lambda_prec
+from ...utils import se_covariance, sma_covariance, se_precision, sma_precision
 from ... import verify
 import numpy as np
 
@@ -19,8 +20,13 @@ class Base_SMASE(Base_Generic):
         st = self.state
         self.state.Psi_1 = sma_covariance
         self.state.Psi_2 = se_covariance
+        self.state.Psi_1i = sma_precision
+        self.state.Psi_2i = se_precision
 
         st.Rho_min, st.Rho_max = -st.Rho_max, -st.Rho_min
+
+        self.configs.Lambda.logp = logp_lambda_prec
+        
         try:
             self.sample(n_samples, n_jobs=n_jobs)
         except (np.linalg.LinAlgError, ValueError) as e:

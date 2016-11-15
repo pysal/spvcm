@@ -1,5 +1,6 @@
 from ..generic import Base_Generic
-from ...utils import se_covariance
+from ..generic.sample import logp_rho_prec, logp_lambda_prec
+from ...utils import se_covariance, se_precision
 from ... import verify
 import numpy as np
 
@@ -20,6 +21,11 @@ class Base_SESE(Base_Generic):
                                         truncation=truncation)
         self.state.Psi_1 = se_covariance
         self.state.Psi_2 = se_covariance
+        self.state.Psi_1i = se_precision
+        self.state.Psi_2i = se_precision
+
+        self.configs.Rho.logp = logp_rho_prec
+        self.configs.Lambda.logp = logp_lambda_prec
         
         try:
             self.sample(n_samples, n_jobs =n_jobs)

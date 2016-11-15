@@ -8,8 +8,7 @@ import copy
 from ...both_levels.generic import Base_Generic
 from ...both_levels.generic.model import SAMPLERS as generic_parameters
 from ... import verify
-from ...utils import sma_covariance, ind_covariance, chol_mvn
-
+from ...utils import sma_covariance, sma_precision, ind_covariance, chol_mvn
 
 
 SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
@@ -36,7 +35,9 @@ class Base_Upper_SMA(Base_Generic):
                                             truncation=truncation)
         st = self.state
         self.state.Psi_1 = ind_covariance
+        self.state.Psi_1i = ind_covariance
         self.state.Psi_2 = sma_covariance
+        self.state.Psi_2i = sma_precision
         original_traced = copy.deepcopy(self.traced_params)
         to_drop = [k for k in original_traced if (k not in SAMPLERS and k in generic_parameters)]
         self.traced_params = copy.deepcopy(SAMPLERS)
@@ -80,7 +81,7 @@ class Base_Upper_SMA(Base_Generic):
         ### S = (Delta'Sigma_Y^{-1}Delta + Sigma_Alpha^{-1})^{-1}
         ### b = (Delta'Sigma_Y^{-1}(Y - X\beta) + 0)
         covm_update = st.Delta.T.dot(st.Delta) / st.Sigma2
-        covm_update += st.PsiTau2i
+        covm_update += st.PsiLambdai / st.Tau2 
         covm_update = la.inv(covm_update)
 
         resids = st.Y - st.XBetas
@@ -110,10 +111,7 @@ class Base_Upper_SMA(Base_Generic):
         ### is
         ### |Psi(rho)|^{-1/2} exp(1/2(eta'Psi(rho)^{-1}eta * Sigma2^{-1})) * 1/(emax-emin)
         st.Lambda = self.configs.Lambda(st)
-        st.PsiLambda = st.Psi_2(st.Lambda, st.M)
-        st.PsiTau2 = st.PsiLambda * st.Tau2
-        st.PsiTau2i = la.inv(st.PsiTau2)
-        st.PsiLambdai = la.inv(st.PsiLambda)
+        st.PsiLambdai = st.Psi_2i(st.Lambda, st.M)
 
 
 class Upper_SMA(Base_Upper_SMA):

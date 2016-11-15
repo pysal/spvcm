@@ -1,5 +1,6 @@
 from ..generic import Base_Generic
-from ...utils import se_covariance, sma_covariance
+from ..generic.sample import logp_rho_prec
+from ...utils import se_covariance, sma_covariance, se_precision, sma_precision
 from ... import verify
 import numpy as np
 
@@ -19,7 +20,11 @@ class Base_SESMA(Base_Generic):
         st = self.state
         st.Psi_1 = se_covariance
         st.Psi_2 = sma_covariance
+        self.state.Psi_1i = se_precision
+        self.state.Psi_2i = sma_precision
 
+        self.configs.Rho.logp = logp_rho_prec
+        
         st.Lambda_min, st.Lambda_max = -st.Lambda_max, -st.Lambda_min
         try:
             self.sample(n_samples, n_jobs=n_jobs)
