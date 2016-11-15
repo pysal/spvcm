@@ -167,8 +167,6 @@ class Base_Generic(Sampler_Mixin):
         else:
             raise Exception('Sample method for Rho not understood:\n{}'
                             .format(Rho_method))
-        print('Rho method, configs: {}'.format(Rho_method, Rho_configs))
-        print('Lambda method, configs: {}'.format(Lambda_method, Lambda_configs))
 
         self.configs = Hashmap()
         self.configs.Rho = Rho_method('Rho', logp_rho_cov, **Rho_configs)
