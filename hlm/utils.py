@@ -114,13 +114,24 @@ def baltim(df=False):
 # MATRIX UTILITIES #
 ####################
 
+def lulogdet(matrix):
+    """
+    compute the log determinant using a lu decomposition appropriate to input type
+    """
+    if spar.issparse(matrix):
+        LUfunction = lambda x: spla.splu(x).U.diagonal()
+    else:
+        LUfunction = lambda x: scla.lu_factor(x)[0].diagonal()
+    LUdiag = LUfunction(matrix)
+    return np.sum(np.log(np.abs(LUdiag)))
+    
 def splogdet(matrix):
     """
     compute the log determinant via an appropriate method according to the input.
     """
     redo = False
     if spar.issparse(matrix):
-        LU = spla.splu(matrix)
+        LU = spla.splu(spar.csc_matrix(matrix))
         ldet = np.sum(np.log(np.abs(LU.U.diagonal())))
     else:
         sgn, ldet = nla.slogdet(matrix)
@@ -226,6 +237,19 @@ def interleave(*arrays, axis=0):
             aout = aout.T
     return aout
 
+def spsolve(A,b):
+    """
+    Solve the system Ax=b for x, depending on the type of A. The solution vector is equivalent to A^{-1}b
+
+    If a is sparse, the result will be sparse. Otherwise, the result will be dense.
+    """
+    if spar.issparse(A):
+        return spla.spsolve(A, b)
+    elif spar.issparse(b):
+        Warn('b is sparse, but A is dense. Solving the dense system.')
+        return spsolve(A, b.toarray())
+    return scla.solve(A,b)
+
 
 
 #########################
@@ -266,8 +290,7 @@ def chol_mvn(Mu, Sigma):
         out = out.reshape(Mu.shape)
     return out
 
-def sma_covariance(param, W):
-    # type (float, np.ndarray) -> np.dnarray
+def sma_covariance(param, W, sparse=True):
     """
     This computes a covariance matrix for a SMA-type error specification:
 
@@ -277,10 +300,19 @@ def sma_covariance(param, W):
     """
     half = speye_like(W) + param * W
     whole = half.dot(half.T)
+    if sparse:
+        return whole
     return whole.toarray()
 
-def se_covariance(param, W):
-    # type (float, sparse) -> np.dnarray
+def sma_precision(param, W, sparse=False):
+    """
+    """
+    covariance = sma_covariance(param, W, sparse=sparse)
+    if sparse:
+        return spinv(covariance)
+    return np.linalg.inv(covariance)
+
+def se_covariance(param, W, sparse=False):
     """
     This computes a covariance matrix for a SAR-type error specification:
 
@@ -291,20 +323,23 @@ def se_covariance(param, W):
     This first calls se_precision, and then inverts the results of that call.
 
     """
-    prec = se_precision(param, W)
+    prec = se_precision(param, W, sparse=sparse)
+    if sparse:
+        return spla.inv(prec)
     return np.linalg.inv(prec)
     
-def se_precision(param, W):
-    # type (float, sparse) -> np.ndarray
+def se_precision(param, W, sparse=True):
     """
     This computes a precision matrix for a SAR-type error specification.
     
     """
     half = speye_like(W) - param * W
     prec = half.T.dot(half)
+    if sparse:
+        return prec
     return prec.toarray()
 
-def ind_covariance(param, W):
+def ind_covariance(param, W, sparse=False):
     """
     This returns a covariance matrix for a standard diagonal specification:
     
@@ -312,7 +347,10 @@ def ind_covariance(param, W):
 
     and always returns a dense matrix. Thus, it ignores param entirely.
     """
-    return np.eye(W.shape[0])
+    out = speye(W.shape[0], sparse=sparse)
+    if sparse:
+        return spar.csc_matrix(out)
+    return out
 
 def grid_det(W, parmin=None, parmax=None, parstep=None, grid=None):
     """
