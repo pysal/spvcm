@@ -37,6 +37,12 @@ class Base_Lower_SMA(Base_Generic):
         for param in to_drop:
             for i, _  in enumerate(self.trace.chains):
                 del self.trace.chains[i][param]
+        extra_traced_params = [] if extra_traced_params is None else extra_traced_params
+        for extra in extra_traced_params:
+            self.traced_params.append(extra)
+            for i, chain in enumerate(self.trace.chains):
+                chain[extra] = []
+
 
         self.state.Psi_1 = sma_covariance
         self.state.Psi_2 = ind_covariance

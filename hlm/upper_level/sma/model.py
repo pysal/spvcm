@@ -28,7 +28,7 @@ class Base_Upper_SMA(Base_Generic):
         W = np.eye((Delta.shape[0]))
         super(Base_Upper_SMA, self).__init__(Y, X, W, M, Delta,
                                             n_samples=0, n_jobs=n_jobs,
-                                            extra_traced_params=extra_traced_params,
+                                            extra_traced_params=None,
                                             priors=priors,
                                             configs=configs,
                                             starting_values=starting_values,
@@ -44,6 +44,12 @@ class Base_Upper_SMA(Base_Generic):
         for param in to_drop:
             for i, _  in enumerate(self.trace.chains):
                 del self.trace.chains[i][param]
+        extra_traced_params = [] if extra_traced_params is None else extra_traced_params
+        for extra in extra_traced_params:
+            self.traced_params.append(extra)
+            for i, chain in enumerate(self.trace.chains):
+                chain[extra] = []
+
 
         if n_samples > 0:
             try:

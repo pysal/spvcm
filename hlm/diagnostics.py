@@ -1,8 +1,9 @@
+from __future__ import division
 import numpy as np
 import pandas as pd
 from .utils import thru_op
 from .abstracts import Trace, Hashmap, _maybe_hashmap, _copy_hashmaps
-import warnings
+from warnings import warn as Warn
 from collections import OrderedDict
 import copy
 
@@ -63,7 +64,7 @@ def summarize(model = None, trace = None, chain=None, varnames=None,
     if HAS_CODA:
         ESS = effective_size(trace=trace, use_R=True)
     else:
-        warn('Computing effective sample size may take a while due to statsmodels.tsa.AR.',
+        Warn('Computing effective sample size may take a while due to statsmodels.tsa.AR.',
              stacklevel=2)
         ESS = effective_size(trace=trace, use_R=False)
     flattened_HPDs = []
@@ -708,7 +709,7 @@ def _resolve_to_trace(model, trace, chain, varnames):
     if trace is not None:
         if isinstance(trace, Trace):
             if varnames is not None:
-                return trace.drop(*[var for var in trace.varnames
+                return trace.drop([var for var in trace.varnames
                                     if var not in varnames], inplace=False)
             else:
                 return copy.deepcopy(trace)

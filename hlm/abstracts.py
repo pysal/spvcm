@@ -231,10 +231,12 @@ class Trace(object):
             self._varnames = list(self.chains[0].keys())
             return self._varnames
 
-    def drop(self, *varnames, inplace=True):
+    def drop(self, varnames, inplace=True):
+        if isinstance(varnames, str):
+            varnames = (varnames,)
         if not inplace:
             new = copy.deepcopy(self)
-            new.drop(*varnames, inplace=True)
+            new.drop(varnames, inplace=True)
             new._varnames = list(new.chains[0].keys())
             return new
         for i, chain in enumerate(self.chains):
@@ -254,7 +256,7 @@ class Trace(object):
             KeyError('The parameters tracked in each chain are not the same!'
                      '\nChains {} do not have the same parameters as chain 1!'.format(bad_chains))
 
-    def add_chain(self, *chains, validate=True):
+    def add_chain(self, chains, validate=True):
         """
         Add chains to a trace object
 
@@ -262,8 +264,9 @@ class Trace(object):
         ----------
         chains  :   Hashmap
 
-
         """
+        if not isinstance(chains, (list, tuple)):
+            chains = (chains,)
         new_chains = [self.chains]
         for chain in chains:
             if isinstance(chain, Hashmap):
@@ -306,10 +309,13 @@ class Trace(object):
         func_args   :   dictionary/keyword arguments
                         arguments needed to be passed to the reduction
         """
+        varnames = func_args.pop('varnames', self.varnames)
+        if isinstance(varnames, str):
+            varnames = (varnames, )
         all_stats = []
         for i, chain in enumerate(self.chains):
             these_stats=dict()
-            for var in self.varnames:
+            for var in varnames:
                 data = np.squeeze(self[i,var])
                 if data.ndim > 1:
                     n,p = data.shape[0:2]
@@ -604,16 +610,16 @@ class Trace(object):
             dfs.to_csv(filename, **pandas_kwargs)
 
     @classmethod
-    def from_df(cls, *dfs, varnames=None, combine_suffix='_'):
+    def from_df(cls, dfs, varnames=None, combine_suffix='_'):
         """
         Convert a dataframe into a trace object
         """
+        if not isinstance(dfs, (tuple, list)):
+            dfs = (dfs,)
         if len(dfs) > 1:
             traces = ([cls.from_df(df, varnames=varnames,
                         combine_suffix=combine_suffix) for df in dfs])
             return cls(*[trace.chains[0] for trace in traces])
-        elif isinstance(dfs[0], list):
-            return cls.from_df(*dfs, varnames=varnames, combine_suffix=combine_suffix)
         else:
             df = dfs[0]
         if varnames is None:

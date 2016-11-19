@@ -38,17 +38,19 @@ def covariates(X):
     
     return X
 
-def center(*arrays, axis=0):
+def center(*arrays, **kw):
     """
     This centers the arrays provided along the axis provided.
     """
+    axis = kw.pop('axis', 0)
     out = [(array - array.mean(axis=axis)) for array in arrays]
     return out if len(out) > 1 else out[0]
 
-def scale(*arrays, axis=0):
+def scale(*arrays, **kw):
     """
     This scales covariates by their standard deviation along the axis provided.
     """
+    axis = kw.pop('axis', 0)
     out = [array/array.std(axis=axis) for array in arrays]
     return out if len(out) > 1 else out[0]
 
