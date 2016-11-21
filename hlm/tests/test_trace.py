@@ -11,7 +11,7 @@ class Test_Trace(ut.TestCase):
     def setUp(self):
 
         self.a = {chr(i+97):list(range(10)) for i in range(5)}
-        
+
         self.t = Trace(**self.a)
         self.mt = Trace(self.a,self.a,self.a)
         self.real_mt = Trace.from_csv(FULL_PATH + '/data/south_mvcm_5000', multi=True)
@@ -80,7 +80,7 @@ class Test_Trace(ut.TestCase):
         assert mt[2, :, :] == {k:list(range(10)) for k in ['a','b','c','d','e']}
         assert mt[:,:,:] == mt.chains
         assert mt[:,:,:] is not mt.chains
-    
+
     def test_to_df(self):
         df = self.t.to_df()
         df2 = pd.DataFrame.from_dict(self.t.chains[0])
@@ -89,14 +89,14 @@ class Test_Trace(ut.TestCase):
         mtdf2 = [pd.DataFrame.from_dict(chain) for chain in self.mt.chains]
         for i in range(len(mtdf2)):
             np.testing.assert_array_equal(mtdf[i].values, mtdf2[i].values)
-   
+
     def test_from_df(self):
         df = self.t.to_df()
         new_trace = Trace.from_df(df)
         assert new_trace == self.t
-        new_mt = Trace.from_df(df, df, df)
+        new_mt = Trace.from_df((df, df, df))
         assert new_mt == self.t
-    
+
     def test_to_csv(self):
         df = self.t.to_df()
         self.t.to_csv('./test_to_csv.csv')
@@ -104,13 +104,13 @@ class Test_Trace(ut.TestCase):
         np.testing.assert_allclose(df.values, new_df.values,
                                     rtol=RTOL, atol=ATOL)
         os.remove('./test_to_csv.csv')
-    
+
     def test_from_csv(self):
         self.t.to_csv('./test_from_csv.csv')
         new_t = Trace.from_csv('./test_from_csv.csv')
         assert self.t == new_t
         os.remove('./test_from_csv.csv')
-    
+
     def test_single_roundtrips(self):
         source_from_file = self.real_singles[0]
         from_df = Trace.from_df(source_from_file.to_df())
@@ -122,7 +122,7 @@ class Test_Trace(ut.TestCase):
 
     def test_multi_roundtrips(self):
         dfs = self.real_mt.to_df()
-        new = Trace.from_df(*dfs)
+        new = Trace.from_df(dfs)
         new._assert_allclose(self.real_mt)
 
 

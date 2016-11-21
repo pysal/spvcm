@@ -8,7 +8,7 @@ from scipy.spatial import distance as d
 from .utils import explode, nexp
 from .sample import sample_phi, logp_phi
 from ...abstracts import Sampler_Mixin, Trace, Hashmap
-from ... import verify
+from ...verify import center as verify_center, covariates as verify_covariates
 from ...utils import chol_mvn
 from ...steps import Metropolis, Slice
 
@@ -51,8 +51,8 @@ class SVC(Sampler_Mixin):
                  center=True,
                  rescale_dists=True):
         if center:
-            X = verify.center(X)
-        X = verify.covariates(X)
+            X = verify_center(X)
+        X = verify_covariates(X)
 
         N,p = X.shape
         Xs = X

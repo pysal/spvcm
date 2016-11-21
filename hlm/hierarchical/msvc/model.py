@@ -11,7 +11,9 @@ from .sample import logp_phi_j
 from ...abstracts import Sampler_Mixin, Trace, Hashmap
 from ...steps import Metropolis, Slice
 from ...utils import chol_mvn
-from ... import verify
+
+#thanks, python 2
+from ...verify import center as verify_center, covariates as verify_covariates
 
 class MSVC(Sampler_Mixin):
     """
@@ -70,9 +72,9 @@ class MSVC(Sampler_Mixin):
             X = np.ones_like(Y)
         else:
             if center:
-                X = verify.center(X)
+                X = verify_center(X)
             if constant.lower().startswith('lo') or constant.lower().startswith('bo'):
-                X = verify.covariates(X)
+                X = verify_covariates(X)
         st.X = X
         n,p = st.X.shape
         st.Xc = explode_stack(st.X)
