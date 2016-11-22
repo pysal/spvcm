@@ -70,7 +70,7 @@ class Sampler_Mixin(object):
         if self.database is not None:
             head_to_sql(self, self._cur, self._cxn)
             for param in self.traced_params:
-                self.trace[param] = [getattr(self.trace, param)[-1]]
+                self.trace.chains[0][param] = [self.trace[param,-1]]
 
     def _parallel_sample(self, n_samples, n_jobs):
         """
@@ -147,6 +147,10 @@ class Sampler_Mixin(object):
     def database(self, filename):
         self._cxn, self._cur = start_sql(self, tracename=filename)
         self._db = filename
+        from .sqlite import trace_from_sql
+        def load_sqlite():
+            return trace_from_sql(filename)
+        self.trace.load_sqlite = load_from_sqlite
 
 def _reflexive_sample(tup):
     """

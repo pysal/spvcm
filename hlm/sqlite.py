@@ -4,14 +4,12 @@ import os
 import sys
 from warnings import warn
 try:
-    import dill as pkl
+    import dill
+    import pickle as pkl
 except ImportError as E:
-    msg = 'The `dill` module is required to use the sqlite backend and was not found.'
+    msg = 'The `dill` module is required to use the sqlite backend fully.'
     warn(msg, stacklevel=2)
-try:
-    from hlm.trace import Trace
-except ImportError:
-    Trace = dict
+    import pickle as pkl
 LEGACY_PYTHON = sys.version_info[0] < 3
 
 CREATE_TEMPLATE = "CREATE TABLE {} (iteration INTEGER PRIMARY KEY, {})"
@@ -37,7 +35,7 @@ def start_sql(model, tracename='model_trace.db'):
     Start a SQLite connection to a local database, specified by tracename.
     """
     if os.path.isfile(tracename):
-        raise Exception('Will not overwrite existing trace model_trace.db')
+        raise Exception('Will not overwrite existing trace {}'.format(tracename))
     cxn = sql.connect(tracename)
     cursor = cxn.cursor()
     cursor.execute(customize_create_template(model.traced_params, 'trace'))
@@ -57,7 +55,7 @@ def point_to_sql(model, cursor, connection, index=0):
         iteration = model.cycles - (index + 1)
     else:
         iteration = index
-    ordered_point = (serialize(model.trace[param][index]) for param in model.traced_params)
+    ordered_point = (serialize(model.trace[param, index]) for param in model.traced_params)
     to_insert = [iteration]
     to_insert.extend(list(ordered_point))
     cursor.execute(customize_insert_template(model.traced_params, 'trace'), tuple(to_insert))
@@ -68,7 +66,7 @@ def trace_to_sql(model, cursor, connection):
     Send a model's entire trace to the database
     """
     for i in range(model.cycles):
-        ordered_point = (serialize(model.trace[param][i]) for param in model.traced_params)
+        ordered_point = (serialize(model.trace[param, i]) for param in model.traced_params)
         to_insert = [i]
         to_insert.extend(list(ordered_point))
         cursor.execute(customize_insert_template(model.traced_params, 'trace'), tuple(to_insert))
@@ -85,6 +83,11 @@ def trace_from_sql(filename, table='trace'):
     data = cxn.execute('SELECT * FROM {}'.format(table)).fetchall()
     cxn.close()
     records = zip(colnames, map(list, zip(*data)))
+
+    # Import must occur here otherwise there's a circularity issue
+
+    from .abstracts import Trace
+
     if table == 'trace':
         out = Trace(**{colname:[maybe_deserialize(entry) for entry in column]
                   for colname, column in records})
@@ -139,13 +142,19 @@ def maybe_deserialize(maybe_bytestring):
     This attempts to deserialize an object, but may return the original object 
     if no deserialization is successful. 
     """
+    if isinstance(maybe_bytestring, (list, tuple)):
+        return type(maybe_bytestring)([maybe_deserialize(byte_element) 
+                                        for byte_element in maybe_bytestring])
     try:
         return pkl.loads(maybe_bytestring)
     except:
         try:
-            return float(maybe_bytestring)
+            return dill.loads(maybe_bytestring)
         except:
-            return maybe_bytestring
+            try:
+                return float(maybe_bytestring)
+            except:
+                return maybe_bytestring
 
 def serialize(v):
     """
