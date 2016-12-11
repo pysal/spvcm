@@ -14,8 +14,8 @@ class Test_Trace(ut.TestCase):
 
         self.t = Trace(**self.a)
         self.mt = Trace(self.a,self.a,self.a)
-        self.real_mt = Trace.from_csv(FULL_PATH + '/data/south_mvcm_5000', multi=True)
-        self.real_singles = [Trace.from_csv(FULL_PATH + '/data/south_mvcm_5000_{}.csv'
+        self.real_mt = Trace.from_csv(FULL_PATH + r'/data/south_mvcm_5000', multi=True)
+        self.real_singles = [Trace.from_csv(FULL_PATH + r'/data/south_mvcm_5000_{}.csv'
                              .format(i)) for i in range(4)]
 
     def test_validate_names(self):

@@ -25,7 +25,7 @@ class Base_MVCM(Sampler_Mixin):
                  priors=None,
                  starting_values=None):
         super(Base_MVCM, self).__init__()
-        
+
         N, p = X.shape
         _N, J = Delta.shape
         self.state = Hashmap(**{'X':X, 'Y':Y, 'Delta':Delta,
@@ -36,18 +36,18 @@ class Base_MVCM(Sampler_Mixin):
             self.traced_params.extend(extra_tracked_params)
         hashmaps = [Hashmap(**{k:[] for k in self.traced_params})]*n_jobs
         self.trace = Trace(*hashmaps)
-        
+
         if priors is None:
             priors = dict()
         if starting_values is None:
             starting_values = dict()
-        
+
         self._setup_priors(**priors)
         self._setup_starting_values(**starting_values)
 
         self.cycles = 0
         self.configs = None
-        
+
 
         try:
             self.sample(n_samples, n_jobs=n_jobs)
@@ -78,10 +78,10 @@ class Base_MVCM(Sampler_Mixin):
         over iterations. This is called one time before sampling.
         """
         st = self.state
-        
+
         st.XtX = np.dot(st.X.T, st.X)
         st.DeltatDelta = np.dot(st.Delta.T, st.Delta)
-        
+
         st.Betas_cov0i = np.linalg.inv(st.Betas_cov0)
         st.Betas_covm = np.dot(st.Betas_cov0, st.Betas_mean0)
         st.Sigma2_an = st.N / 2 + st.Sigma2_a0
@@ -90,10 +90,10 @@ class Base_MVCM(Sampler_Mixin):
         st.Ij = np.identity(st.J)
         st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
         st.XBetas = np.dot(st.X, st.Betas)
-        
+
         st.Psi_1 = ind_covariance
         st.Psi_2 = ind_covariance
-        
+
         st.PsiRho = st.In
         st.PsiLambda = st.Ij
 
@@ -101,7 +101,7 @@ class Base_MVCM(Sampler_Mixin):
         st.PsiSigma2i = la.inv(st.PsiSigma2)
         st.PsiTau2 = st.Ij * st.Tau2
         st.PsiTau2i = la.inv(st.PsiTau2)
-        
+
         st.PsiRhoi = la.inv(st.PsiRho)
         st.PsiLambdai = la.inv(st.PsiLambda)
 
@@ -121,7 +121,7 @@ class Base_MVCM(Sampler_Mixin):
 
     def _iteration(self):
         st = self.state
-    
+
         ### Sample the Beta conditional posterior
         ### P(beta | . ) \propto L(Y|.) \dot P(\beta)
         ### is
@@ -131,14 +131,14 @@ class Base_MVCM(Sampler_Mixin):
         covm_update = st.X.T.dot(st.X) / st.Sigma2
         covm_update += st.Betas_cov0i
         covm_update = la.inv(covm_update)
-    
+
         resids = st.Y - st.Delta.dot(st.Alphas)
         XtSresids = st.X.T.dot(resids) / st.Sigma2
         mean_update = XtSresids + st.Betas_cov0i.dot(st.Betas_mean0)
         mean_update = np.dot(covm_update, mean_update)
         st.Betas = chol_mvn(mean_update, covm_update)
         st.XBetas = np.dot(st.X, st.Betas)
-    
+
         ### Sample the Random Effect conditional posterior
         ### P( Alpha | . ) \propto L(Y|.) \dot P(Alpha | \lambda, Tau2)
         ###                               \dot P(Tau2) \dot P(\lambda)
@@ -150,13 +150,13 @@ class Base_MVCM(Sampler_Mixin):
         covm_update = st.Delta.T.dot(st.Delta) / st.Sigma2
         covm_update += st.PsiTau2i
         covm_update = la.inv(covm_update)
-    
+
         resids = st.Y - st.XBetas
         mean_update = st.Delta.T.dot(resids) / st.Sigma2
         mean_update = np.dot(covm_update, mean_update)
         st.Alphas = chol_mvn(mean_update, covm_update)
         st.DeltaAlphas = np.dot(st.Delta, st.Alphas)
-    
+
         ### Sample the Random Effect aspatial variance parameter
         ### P(Tau2 | .) \propto L(Y|.) \dot P(\Alpha | \lambda, Tau2)
         ###                            \dot P(Tau2) \dot P(\lambda)
@@ -166,7 +166,7 @@ class Base_MVCM(Sampler_Mixin):
         st.Tau2 = stats.invgamma.rvs(st.Tau2_an, scale=bn)
         st.PsiTau2 = st.Ij * st.Tau2
         st.PsiTau2i = la.inv(st.PsiTau2)
-        
+
         ### Sample the response aspatial variance parameter
         ### P(Sigma2 | . ) \propto L(Y | .) \dot P(Sigma2)
         ### is
@@ -178,7 +178,70 @@ class Base_MVCM(Sampler_Mixin):
 
 class MVCM(Base_MVCM):
     """
-    The class that intercepts & validates input
+    This is a class that provides the generic structures required for the two-level variance components model
+
+    Formally, this is the following distributional model for Y:
+
+    Y ~ N(X * Beta, I_n * Sigma2 + Delta Delta' Tau2)
+
+    Where Delta is the dummy variable matrix, Sigma2 is the response-level variance, and Tau2 is the region-level variance. 
+
+    Arguments
+    ----------
+    Y       :   numpy.ndarray
+                The (n,1) array containing the response to be modeled
+    X       :   numpy.ndarray
+                The (n,p) array containing covariates used to predict the  response, Y.
+    Z       :   numpy.ndarray
+                The (J,p') array of region-level covariates used to predict the response, Y.
+    Delta   :   numpy.ndarray
+                The (n,J) dummy variable matrix, relating observation i to region j. Required if membership is not passed.
+    membership: numpy.ndarray
+                The (n,) vector of labels assigning each observation to a region. Required if Delta is not passed.
+    transform  : string
+                 weights transform to use in modeling.
+    verbose    : bool
+                 whether to provide verbose output about sampling progress
+    n_samples : int
+                the number of samples to draw. If zero, the model will only be initialized, and later sampling can be done using model.sample
+    n_jobs  :   int
+                the number of parallel chains to run. Defaults to 1.
+    extra_traced_param  :   list of strings
+                            extra parameters in the trace to record.
+    center  :   bool
+                Whether to center the input data so that its mean is zero. Occasionally improves the performance of the sampler.
+    scale   :   bool
+                Whether to rescale the input data so that its variance is one. May dramatically improve the performance of the sampler, at the cost of interpretability of the coefficients.
+    priors  :   dictionary
+                A dictionary used to configure the priors for the model. This may include the following keys:
+                    Betas_cov0  : prior covariance for Beta parameter vector
+                                (default: I*100)
+                    Betas_mean0 : prior mean for Beta parameters
+                                (default: 0)
+                    Sigma2_a0   : prior shape parameter for inverse gamma prior on response-level variance
+                                (default: .001)
+                    Sigma2_b0   : prior scale parameter for inverse gamma prior on response-level variance
+                                (default: .001)
+                    Tau2_a0     : prior shape parameter for inverse gamma prior on regional-level variance
+                                (default: .001)
+                    Tau2_b0     : prior scale parameter for inverse gamma prior on regional-level variance
+                                (default: .001)
+
+    starting_value :    dictionary
+                        A dictionary containing the starting values of the sampler. If n_jobs > 1, these starting values are perturbed randomly to induce overdispersion.
+
+                        This dicutionary may include the following keys:
+                        Betas   : starting vector of Beta parameters.
+                                (default: np.zeros(p,1))
+                        Alphas  : starting vector of Alpha variance components.
+                                (default: np.zeros(J,1))
+                        Sigma2  : starting value of response-level variance
+                                (default: 4)
+                        Tau2    : starting value of region-level varaince
+                                (default: 4)
+
+                For options that can be in Lambda/Rho_configs, see:
+                mlm_gibbs.steps.Slice, mlm_gibbs.steps.Metropolis
     """
     def __init__(self, Y, X, Z=None, Delta=None, membership=None,
                  #data options
@@ -190,7 +253,7 @@ class MVCM(Base_MVCM):
                  center=True,
                  scale=False
                  ):
-        
+
         N, _ = X.shape
         if Delta is not None:
             _,J = Delta.shape
