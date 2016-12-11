@@ -9,4 +9,5 @@ setup(name='mlm_gibbs',
       license='3-Clause BSD',
       packages= find_packages(),
       install_requires=['numpy','scipy','pysal','pandas','seaborn'],
+      include_package_data=True,
       zip_safe=False)

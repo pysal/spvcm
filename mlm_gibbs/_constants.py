@@ -8,7 +8,7 @@ TEST_SEED = 310516
 PY2 = sys.version_info[0] == 2
 
 if PY2:
-    CLASSTYPES = (classobj, type)
+    CLASSTYPES = (types.ClassType, type)
 else:
     CLASSTYPES = (type,)
 

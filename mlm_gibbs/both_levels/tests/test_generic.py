@@ -21,7 +21,7 @@ class Test_Generic(ut.TestCase, Model_Mixin):
 
     @ut.skip #
     def test_mvcm(self):
-        instance = self.cls(**self.inputs, n_samples=0)
+        instance = self.cls(**self.inputs)
         np.random.seed(TEST_SEED)
         instance.draw()
         other_answers = Trace.from_csv(FULL_PATH + '/data/mvcm.csv')
