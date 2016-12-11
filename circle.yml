@@ -18,7 +18,7 @@ dependencies:
                     chmod +x ~/miniconda.sh;
                     ~/miniconda.sh -b -p /home/ubuntu/miniconda;
                     conda update --yes --quiet conda;
-                    conda create -n circleenv --yes pip python=2.7 pip pandas pysal scipy numpy nose seaborn dill;
+                    conda create -n circleenv --yes pip python=2.7 pip pandas pysal scipy numpy nose seaborn dill statsmodels;
                   else
                     echo "Conda already set up."; 
             fi
