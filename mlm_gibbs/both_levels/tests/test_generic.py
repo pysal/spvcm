@@ -15,7 +15,8 @@ class Test_Generic(ut.TestCase, Model_Mixin):
     def setUp(self):
         super(Test_Generic, self).build_self()
         self.cls = M.Generic
-        instance = self.cls(**self.inputs, n_samples=0)
+        self.inputs['n_samples'] = 0
+        instance = self.cls(**self.inputs)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/generic.csv')
 
     @ut.skip #
@@ -28,14 +29,14 @@ class Test_Generic(ut.TestCase, Model_Mixin):
         other_answers._assert_allclose(instance.trace.drop(
                                        *strip_out, inplace=False),
                                        rtol=RTOL, atol=ATOL)
-    
+
     def test_membership_delta_mismatch(self):
         bad_D = np.ones(self.X.shape)
         try:
             self.cls(**self.inputs, n_samples=0)
         except UserWarning:
             pass
-    
+
     def test_weights_mismatch(self):
         local_input = copy.deepcopy(self.inputs)
         local_input['W_'] = local_input['M']
@@ -46,7 +47,7 @@ class Test_Generic(ut.TestCase, Model_Mixin):
             self.cls(**local_input, n_samples=0)
         except (UserWarning, AssertionError):
             pass
-    
+
     def test_missing_membership(self):
         local_input = copy.deepcopy(self.inputs)
         del local_input['membership']

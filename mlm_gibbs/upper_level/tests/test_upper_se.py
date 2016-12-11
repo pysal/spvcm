@@ -13,5 +13,6 @@ class Test_Upper_SE(ut.TestCase, Model_Mixin):
         super(Test_Upper_SE, self).build_self()
         self.cls = upper.SE
         del self.inputs["W"]
-        instance = self.cls(**self.inputs, n_samples=0)
+        self.inputs['n_samples'] = 0
+        instance = self.cls(**self.inputs)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/upper_se.csv')

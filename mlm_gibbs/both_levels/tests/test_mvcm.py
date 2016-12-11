@@ -11,5 +11,6 @@ class Test_MVCM(ut.TestCase, Model_Mixin):
         self.cls = M.MVCM
         del self.inputs['M']
         del self.inputs['W']
-        self.instance = self.cls(**self.inputs, n_samples=0)
+        self.inputs['n_samples'] = 0
+        self.instance = self.cls(**self.inputs)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/mvcm.csv')

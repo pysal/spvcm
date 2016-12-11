@@ -12,5 +12,6 @@ class Test_Lower_SMA(ut.TestCase, Model_Mixin):
         super(Test_Lower_SMA, self).build_self()
         self.cls = lower.SMA
         del self.inputs["M"]
-        instance = self.cls(**self.inputs, n_samples=0)
+        self.inputs['n_samples'] = 0
+        instance = self.cls(**self.inputs)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/lower_sma.csv')

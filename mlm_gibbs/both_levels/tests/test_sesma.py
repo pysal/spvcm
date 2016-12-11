@@ -9,5 +9,6 @@ class Test_SESMA(ut.TestCase, Model_Mixin):
     def setUp(self):
         super(Test_SESMA, self).build_self()
         self.cls = M.SESMA
-        self.instance = self.cls(**self.inputs, n_samples=0)
+        self.inputs['n_samples'] = 0
+        self.instance = self.cls(**self.inputs)
         self.answer_trace = Trace.from_csv(FULL_PATH + '/data/sesma.csv')
