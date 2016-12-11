@@ -35,7 +35,7 @@ def covariates(X):
              " constant will be added automatically")
     else:
         X = sphstack(np.ones((X.shape[0], 1)), X)
-    
+
     return X
 
 def center(*arrays, **kw):

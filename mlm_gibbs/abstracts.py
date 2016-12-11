@@ -16,6 +16,9 @@ from collections import OrderedDict
 
 
 class Sampler_Mixin(object):
+    """
+    A Mixin class designed to facilitate code reuse. This should be the parent class of anything that uses the sampling framework in this package.
+    """
     def __init__(self):
         super(Sampler_Mixin, self).__init__()
 
@@ -26,14 +29,14 @@ class Sampler_Mixin(object):
 
         Parameters
         ----------
-        n_samples      :   int
-                        number of samples from the joint posterior density to
-                        take
+        n_samples   :   int
+                        number of samples from the joint posterior density to take
+        n_jobs      :   int
+                        number of parallel chains to run.
 
         Returns
         -------
-        updates all values in place, may return trace of sampling run if pop is
-        True
+        Implicitly updates all values in place, returns None
         """
         if n_jobs > 1:
            self._parallel_sample(n_samples, n_jobs)
@@ -59,7 +62,7 @@ class Sampler_Mixin(object):
 
     def draw(self):
         """
-        Take exactly one sample from the joint posterior distribution
+        Take exactly one sample from the joint posterior distribution.
         """
         if self.cycles == 0:
             self._finalize()
@@ -74,7 +77,7 @@ class Sampler_Mixin(object):
 
     def _parallel_sample(self, n_samples, n_jobs):
         """
-        Run n_jobs parallel samples of a given model
+        Run n_jobs parallel samples of a given model. Not intended to be called directly, and should be called by model.sample.
         """
         models = [copy.deepcopy(self) for _ in range(n_jobs)]
         for i, model in enumerate(models):
@@ -113,6 +116,9 @@ class Sampler_Mixin(object):
             self.total_sample_time = _stop - _start
 
     def _fuzz_starting_values(self, state=None):
+        """
+        Function to overdisperse starting values used in the package.
+        """
         st = self.state
         if hasattr(st, 'Betas'):
             st.Betas += np.random.normal(0,5, size=st.Betas.shape)
@@ -128,19 +134,34 @@ class Sampler_Mixin(object):
             st.Rho += np.random.uniform(-.5,.5)
 
     def _finalize(self, **args):
+        """
+        Abstract function to ensure inheritors define a finalze method. This method should compute all derived quantities used in the _iteration() function that would change if the user changed priors, starting values, or other information. This is to ensure that if the user initializes the sampler with n_samples=0 and then changes the state, the derived quantites used in sampling are correct.
+        """
         raise NotImplementedError
 
     def _setup_priors(self, **args):
+        """
+        Abstract function to ensure inheritors define a _setup_priors method. This method should assign into the state all of the correct priors for all parameters in the model.
+        """
         raise NotImplementedError
 
     def _setup_truncation(self, **args):
+        """
+        Abstract function to ensure inheritors define a _setup_truncation method. This method should truncate parameter space to a given arbitrary bounds.
+        """
         raise NotImplementedError
 
     def _setup_starting_values(self, **args):
+        """
+        Abstract function to ensure that inheritors define a _setup_starting_values method. This method should assign the correct values for each of the parameters into model.state.
+        """
         raise NotImplementedError
 
     @property
     def database(self):
+        """
+        the database used for the model.
+        """
         return getattr(self, '_db', None)
 
     @database.setter
@@ -210,6 +231,22 @@ class Hashmap(dict):
         del self.__dict__[key]
 
 class Trace(object):
+    """
+    Object to contain results from sampling.
+
+    Arguments
+    ---------
+    chains  :   a chain or comma-separated sequence of chains
+                a chain is a dict-like collection, where keys are the parameter name and the values are the values of the chain.
+    kwargs  :   a dictionary splatted into keyword arguments
+                the name of the argument is taken to the be the parameter name, and the value is taken to be a chain of that parameter.
+
+    Examples
+    ---------
+    >>> Trace(a=[1,2,3], b=[4,2,5], c=[1,9,23]) #Trace with one chain
+    >>> Trace([{'a':[1,2,3], 'b':[4,2,5], 'c':[1,9,23]},
+               {'a':[2,5,1], 'b':[2,9,1], 'c':[9,21,1]}]) #Trace with two chains
+    """
     def __init__(self, *chains, **kwargs):
         if chains is () and kwargs != dict():
             self.chains = _maybe_hashmap(kwargs)
@@ -221,6 +258,9 @@ class Trace(object):
 
     @property
     def varnames(self, chain=None):
+        """
+        Names of variables contained in the trace.
+        """
         try:
             return self._varnames
         except AttributeError:
@@ -236,6 +276,16 @@ class Trace(object):
             return self._varnames
 
     def drop(self, varnames, inplace=True):
+        """
+        Drop a variable from the trace.
+
+        Arguments
+        ---------
+        varnames    :   list of strings
+                        names of parameters to drop from the trace.
+        inplace     :   bool
+                        whether to return a copy of the trace with parameters removed, or remove them inplace.
+        """
         if isinstance(varnames, str):
             varnames = (varnames,)
         if not inplace:
@@ -249,6 +299,9 @@ class Trace(object):
         self._varnames = list(self.chains[0].keys())
 
     def _validate_schema(self, chains=None):
+        """
+        Validates the trace to ensure that the chain is self-consistent.
+        """
         if chains is None:
             chains = self.chains
         tracked_in_each = [set(chain.keys()) for chain in chains]
@@ -266,8 +319,10 @@ class Trace(object):
 
         Parameters
         ----------
-        chains  :   Hashmap
-
+        chains  :   Hashmap or list of hashmaps
+                    chains to merge into the trace
+        validate:   bool
+                    whether or not to validate the schema and reject the chain if it does not match the current trace.
         """
         if not isinstance(chains, (list, tuple)):
             chains = (chains,)
@@ -310,6 +365,8 @@ class Trace(object):
         ---------
         func        :   callable
                         a function that returns a result when provided a flat vector.
+        varnames    :   string or list of strings
+                        a keyword only argument governing which parameters to map over.
         func_args   :   dictionary/keyword arguments
                         arguments needed to be passed to the reduction
         """
@@ -346,6 +403,9 @@ class Trace(object):
 
     @property
     def n_iters(self):
+        """
+        Number of raw iterations stored in the trace.
+        """
         lengths = [len(chain[self.varnames[0]]) for chain in self.chains]
         if len(lengths) == 1:
             return lengths[0]
@@ -383,6 +443,14 @@ class Trace(object):
         return f,ax
 
     def summarize(self, level=0):
+        """
+        Compute a summary of the trace. See Also: diagnostics.summary
+
+        Arguments
+        ------------
+        level   :   int
+                    0 for a summary by chain or 1 if the summary should be computed by pooling over chains.
+        """
         from .diagnostics import summarize
         return summarize(trace=self, level=level)
 
@@ -564,7 +632,11 @@ class Trace(object):
 
     def to_df(self):
         """
-        Convert the trace object to a Pandas Dataframe
+        Convert the trace object to a Pandas Dataframe.
+
+        Returns
+        -------
+        a dataframe where each column is a parameter. Multivariate parameters are vectorized and stuffed into a column.
         """
         dfs = []
         outnames = self.varnames
@@ -602,6 +674,13 @@ class Trace(object):
         If there are multiple chains in this trace, this will write
         them each out to 'filename_number.csv', where `number` is the
             number of the trace.
+
+        Arguments
+        ---------
+        filename    :   string
+                        name of file to write the trace to.
+        pandas_kwargs:  keyword arguments
+                        arguments to pass to the pandas to_csv function.
         """
         if 'index' not in pandas_kwargs:
             pandas_kwargs['index'] = False
@@ -616,7 +695,15 @@ class Trace(object):
     @classmethod
     def from_df(cls, dfs, varnames=None, combine_suffix='_'):
         """
-        Convert a dataframe into a trace object
+        Convert a dataframe into a trace object.
+
+        Arguments
+        ----------
+        dfs     :   dataframe or list of dataframes
+                    pandas dataframes to convert into a trace. Each dataframe is assumed to be a single chain.
+        varnames:   string or list of strings
+                    names to use instead of the names in the dataframe. If none, the column
+                    names are split using `combine_suffix`, and the unique things before the suffix are used as parameter names.
         """
         if not isinstance(dfs, (tuple, list)):
             dfs = (dfs,)
@@ -656,6 +743,9 @@ class Trace(object):
 
     @classmethod
     def from_pymc3(cls, pymc3trace):
+        """
+        Convert a PyMC3 trace to a mlm_gibbs trace
+        """
         try:
             from pymc3 import trace_to_dataframe
         except ImportError:
@@ -669,6 +759,17 @@ class Trace(object):
                       varnames=None, combine_suffix='_', **pandas_kwargs):
         """
         Read a CSV into a trace object, by way of `Trace.from_df()`
+
+        Arguments
+        ----------
+        filename    :   string
+                        string containing the name of the file to read.
+        multi       :   bool
+                        flag denoting whether the trace being read is a multitrace or not. If so, the filename is understood to be the prefix of many files that end in `filename_#.csv`
+        varnames    :   string or list of strings
+                        custom names to use for the trace. If not provided, combine suffix is used to identify the unique prefixes in the csvs.
+        pandas_kawrgs:  keyword arguments
+                        keyword arguments to pass to the pandas functions.
         """
         if multi:
             filepath = os.path.dirname(os.path.abspath(filename))
@@ -697,6 +798,9 @@ class Trace(object):
 ####################
 
 def _ifilter(filt,iterable):
+    """
+    Filter an iterable by whether or not each item is in the filt
+    """
     try:
         return iterable[filt]
     except:
@@ -705,6 +809,9 @@ def _ifilter(filt,iterable):
         return [val for i,val in enumerate(iterable) if i in filt]
 
 def _maybe_hashmap(*collections):
+    """
+    Attempt to coerce a collection into a Hashmap. Otherwise, leave it alone.
+    """
     out = []
     for collection in collections:
         if isinstance(collection, Hashmap):
@@ -714,5 +821,8 @@ def _maybe_hashmap(*collections):
     return out
 
 def _copy_hashmaps(*hashmaps):
+    """
+    Create deep copies of the hashmaps passed to the function.
+    """
     return [Hashmap(**{k:copy.deepcopy(v) for k,v in hashmap.items()})
             for hashmap in hashmaps]

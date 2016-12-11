@@ -41,18 +41,18 @@ def thru_op(*args, **kws):
 def south(df=False):
     """
     Sets up the data for the US southern counties example.
-    
+
     Returns
     -------
     dictionary or (dictionary, dataframe), where the dictionary is keyed on:
-    
+
     X           : Data from southern counties, columns "GI89", "BLK90", "HR90"
     Y           : Outcome variate, "DNL90"
     Z           : upper-level variate, the state average "FH90"
     W           : queen weights matrix between counties
     M           : queen matrix between states
     membership  : membership vector relating counties to their states
-    
+
     and the dataframe contains the raw dataset
     """
     import pysal as ps
@@ -64,7 +64,7 @@ def south(df=False):
     Z = data.groupby('STATE_NAME')['FH90'].mean()
     Z = Z.values.reshape(-1,1)
     J = Z.shape[0]
-    
+
     Y = data.DNL90.values.reshape(-1,1)
 
     W2 = ps.queen_from_shapefile(ps.examples.get_path('us48.shp'),
@@ -73,12 +73,12 @@ def south(df=False):
     W1 = ps.queen_from_shapefile(ps.examples.get_path('south.shp'),
                                  idVariable='FIPS')
     W1 = ps.w_subset(W1, ids=data.FIPS.tolist()) #again, only keep what's in the data
-    
+
     W1.transform = 'r'
     W2.transform = 'r'
-    
+
     membership = data.STATE_NAME.apply(lambda x: W2.id_order.index(x)).values
-    
+
     d = {'X':X, 'Y':Y, 'Z':Z, 'W':W1, 'M':W2, 'membership':membership}
     if df:
         return d, data
@@ -88,15 +88,15 @@ def south(df=False):
 def baltim(df=False):
     """
     Sets up the baltimore house price example
-    
+
     Returns
     --------
     dictionary or (dictinoary, dataframe), where the dictionary is keyed:
-    
+
     X           : Data from baltimore houses, columns "AGE", "LOTSZ", "SQFT"
     Y           : outcomes, log house price
     coordinates : the geographic coordinates of house sales
-    
+
     dataframe contains the raw data of the baltimore example
     """
     baltim = ps.pdio.read_files(ps.examples.get_path('baltim.shp'))
@@ -110,7 +110,7 @@ def baltim(df=False):
         return out, baltim
     else:
         return out
-    
+
 ####################
 # MATRIX UTILITIES #
 ####################
@@ -125,7 +125,7 @@ def lulogdet(matrix):
         LUfunction = lambda x: scla.lu_factor(x)[0].diagonal()
     LUdiag = LUfunction(matrix)
     return np.sum(np.log(np.abs(LUdiag)))
-    
+
 def splogdet(matrix):
     """
     compute the log determinant via an appropriate method according to the input.
@@ -272,7 +272,7 @@ def sma_covariance(param, W, sparse=True):
     This computes a covariance matrix for a SMA-type error specification:
 
     ( (I + param * W)(I + param * W)^T)
-    
+
     this always returns a dense array
     """
     half = speye_like(W) + param * W
@@ -283,6 +283,7 @@ def sma_covariance(param, W, sparse=True):
 
 def sma_precision(param, W, sparse=False):
     """
+    This computes a precision matrix for a spatial moving average error specification.
     """
     covariance = sma_covariance(param, W, sparse=sparse)
     if sparse:
@@ -294,9 +295,9 @@ def se_covariance(param, W, sparse=False):
     This computes a covariance matrix for a SAR-type error specification:
 
     ( (I - param * W)^T(I - param * W) )^{-1}
-    
+
     and always returns a dense matrix.
-    
+
     This first calls se_precision, and then inverts the results of that call.
 
     """
@@ -304,11 +305,10 @@ def se_covariance(param, W, sparse=False):
     if sparse:
         return spla.inv(prec)
     return np.linalg.inv(prec)
-    
+
 def se_precision(param, W, sparse=True):
     """
     This computes a precision matrix for a SAR-type error specification.
-    
     """
     half = speye_like(W) - param * W
     prec = half.T.dot(half)
@@ -319,7 +319,7 @@ def se_precision(param, W, sparse=True):
 def ind_covariance(param, W, sparse=False):
     """
     This returns a covariance matrix for a standard diagonal specification:
-    
+
     I
 
     and always returns a dense matrix. Thus, it ignores param entirely.

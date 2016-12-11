@@ -15,9 +15,7 @@ SAMPLERS = ['Alphas', 'Betas', 'Sigma2', 'Tau2', 'Lambda']
 
 class Base_Upper_SMA(Base_Generic):
     """
-    The class that actually ends up setting up the Generic model. Sets configs,
-    data, truncation, and initial parameters, and then attempts to apply the
-    sample function n_samples times to the state.
+    All arguments are documented in Upper_SMA
     """
     def __init__(self, Y, X, M, Delta, n_samples=1000, n_jobs=1,
                  extra_traced_params = None,
@@ -87,7 +85,7 @@ class Base_Upper_SMA(Base_Generic):
         ### S = (Delta'Sigma_Y^{-1}Delta + Sigma_Alpha^{-1})^{-1}
         ### b = (Delta'Sigma_Y^{-1}(Y - X\beta) + 0)
         covm_update = st.Delta.T.dot(st.Delta) / st.Sigma2
-        covm_update += st.PsiLambdai / st.Tau2 
+        covm_update += st.PsiLambdai / st.Tau2
         covm_update = la.inv(covm_update)
 
         resids = st.Y - st.XBetas
@@ -122,7 +120,96 @@ class Base_Upper_SMA(Base_Generic):
 
 class Upper_SMA(Base_Upper_SMA):
     """
-    The class that intercepts & validates input
+    This is a class that provides the generic structures required for the two-level variance components model with spatial moving average errors in the region level and independent errors in the lower level.
+
+    Formally, this is the following distributional model for Y:
+
+    Y ~ N(X * Beta, I * Sigma2 + Delta Phi_2(Lambda, Tau2) Delta')
+
+    Where Delta is the dummy variable matrix, Rho, Sigma2 are response-level autoregressive and scale components of a spatial autoregressive covariance function, Phi_1. Lambda and Tau2 are regional-level components for spatial autoregressive covariance function, Phi_2. In this case, Phi_1 and Phi_2 are Simultaneously-autoregressive errors over weights matrices W,M:
+
+    Phi_1(Rho, Sigma2) = I * Sigma2
+    Phi_2(Lambda, Tau2) = [(I + Lambda M)(I + Lambda M)'] * Tau2
+
+    Arguments
+    ----------
+    Y       :   numpy.ndarray
+                The (n,1) array containing the response to be modeled
+    X       :   numpy.ndarray
+                The (n,p) array containing covariates used to predict the  response, Y.
+    W       :   pysal.weights.W
+                a spatial weights object for the n observations
+    M       :   pysal.weights.W
+                a spatial weights object for the J regions.
+    Z       :   numpy.ndarray
+                The (J,p') array of region-level covariates used to predict the response, Y.
+    Delta   :   numpy.ndarray
+                The (n,J) dummy variable matrix, relating observation i to region j. Required if membership is not passed.
+    membership: numpy.ndarray
+                The (n,) vector of labels assigning each observation to a region. Required if Delta is not passed.
+    transform  : string
+                 weights transform to use in modeling.
+    verbose    : bool
+                 whether to provide verbose output about sampling progress
+    n_samples : int
+                the number of samples to draw. If zero, the model will only be initialized, and later sampling can be done using model.sample
+    n_jobs  :   int
+                the number of parallel chains to run. Defaults to 1.
+    extra_traced_param  :   list of strings
+                            extra parameters in the trace to record.
+    center  :   bool
+                Whether to center the input data so that its mean is zero. Occasionally improves the performance of the sampler.
+    scale   :   bool
+                Whether to rescale the input data so that its variance is one. May dramatically improve the performance of the sampler, at the cost of interpretability of the coefficients.
+    priors  :   dictionary
+                A dictionary used to configure the priors for the model. This may include the following keys:
+                    Betas_cov0  : prior covariance for Beta parameter vector
+                                (default: I*100)
+                    Betas_mean0 : prior mean for Beta parameters
+                                (default: 0)
+                    Sigma2_a0   : prior shape parameter for inverse gamma prior on response-level variance
+                                (default: .001)
+                    Sigma2_b0   : prior scale parameter for inverse gamma prior on response-level variance
+                                (default: .001)
+                    Tau2_a0     : prior shape parameter for inverse gamma prior on regional-level variance
+                                (default: .001)
+                    Tau2_b0     : prior scale parameter for inverse gamma prior on regional-level variance
+                                (default: .001)
+                    Log_Lambda0 : prior on Lambda, the region-level autoregressive parameter. Must be a callable function that takes a single argument and returns a single value providing the log prior likelihood.
+                                (default: priors.constant)
+                    Log_Rho0    : prior on Rho, the response-level autoregressive paraameter. Must be a callable function that takes a single argument and returns a single value providing the log prior likelihood.
+                                (default: priors.constant)
+    starting_value :    dictionary
+                        A dictionary containing the starting values of the sampler. If n_jobs > 1, these starting values are perturbed randomly to induce overdispersion.
+
+                        This dicutionary may include the following keys:
+                        Betas   : starting vector of Beta parameters.
+                                (default: np.zeros(p,1))
+                        Alphas  : starting vector of Alpha variance components.
+                                (default: np.zeros(J,1))
+                        Sigma2  : starting value of response-level variance
+                                (default: 4)
+                        Tau2    : starting value of region-level varaince
+                                (default: 4)
+                        Rho     : starting value of response-level spatial autoregressive parameter
+                                (default: -1/n)
+                        Lambda  : starting value of region-level spatial autoregressive parameter
+                                (default -1/J)
+    config  :   dictionary
+                A dictionary containing the configuration values for the non-Gibbs samplers for the spatial parameters. May be specified for each parameter individually (if both are in the model), or may be specified implicitly for the relevant parameter to the model. Keys may include:
+                Rho_method      : string specifying whether "met" or "slice" sampling should be used for the response-level effects
+                Rho_configs     : configuration options for the sampler for the response-level effects that will be used in the step method.
+                Lambda_method   : string specifying whether 'met' or 'slice' sampling should be used for the region-level effects
+                Lambda_configs  : configuration options for the sampler for the region-level effects that will be used in the step method.
+
+                For options that can be in Lambda/Rho_configs, see:
+                mlm_gibbs.steps.Slice, mlm_gibbs.steps.Metropolis
+    truncation  :   dictionary
+                    A dictionary containing the configuration values for the maximum and minimum allowable Lambda and Rho parameters. If these are not provided, the support is row-standardized by default, and the minimal eigenvalue computed for the lower bound on the parameters. *only* the single minimum eigenvalue is computed, so this is still rather efficient for large matrices. Keys may include:
+                    Rho_min     : minimum value allowed for response-level autoregressive coefficient
+                    Rho_max     : maximum value allowed for response-level autoregressive coefficient
+                    Lambda_min  : minimum value allowed for region-level autoregressive coefficient
+                    Lambda_max  : maximum value allowed for region-level autoregressive coefficient.
     """
     def __init__(self, Y, X, M, Z=None, Delta=None, membership=None,
                  #data options

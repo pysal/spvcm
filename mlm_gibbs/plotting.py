@@ -210,7 +210,7 @@ def conv_plot(model=None, trace=None, chain=None, varnames=None,
               N_bins=200, roller=pd.rolling_mean,
               burn=0, thin=None, plot_kw=None, fig_kw=None, ax=None):
     """
-    This plots a moving average of the chain alongside of a standard error indicator.     This is a bad function and shouldn't be used unless N_bins is very high relative to the chain length. It takes a long time to compute.
+    This plots a moving average of the chain alongside of a standard error indicator. This takes a long time to compute and provides poor plots unless N_bins is very high relative to the chain length.
 
     Arguments
     ---------

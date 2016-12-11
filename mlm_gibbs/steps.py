@@ -11,7 +11,7 @@ MAX_SLICE = 1000
 def inversion(pdvec, grid):
     """
     sample from a probability distribution vector, according to a grid of values
-    
+
     Parameters
     -----------
     pdvec   :   np.ndarray
@@ -63,7 +63,7 @@ def metropolis(state, current, proposal, logp, jump):
 
         hastings_factor = backward - forwards
         r = new_logp - current_logp + hastings_factor
-        
+
         r = np.min((0, r))
         u = np.log(np.random.random())
     except:
@@ -76,7 +76,7 @@ def metropolis(state, current, proposal, logp, jump):
         print(r)
         print(u)
         raise
-    
+
     if u < r:
         outval = new_val
         accepted = True
@@ -88,7 +88,7 @@ def metropolis(state, current, proposal, logp, jump):
 def slicer(state, current, logp, width, adapt=10):
     """
     Implements slice sampling on a bounded log-concave parameter, as according to Neal 2003.
-    
+
     Arguments
     ---------
     state   :   Hashmap/dict or tuple/list/iterable
@@ -105,22 +105,22 @@ def slicer(state, current, logp, width, adapt=10):
                 width of the slice to use when sampling.
     adapt   :   int
                 weight to place on initial slice widths. Computes the moving average of the past `adapt` widths and the current width.
-    
+
     """
     current_logp = logp(state, current)
     n_iterations = 0
     # p. 712 of Neal defines this auxiliary variable on the log scale
     slice_height = current_logp - np.random.exponential()
-    
+
     left = current - np.random.uniform(0,width)
     right = left + width
-    
+
     while slice_height < logp(state, left):
         left -= .1*width
     while slice_height < logp(state, right):
         right += .1*width
-    
-    
+
+
     while True:
         candidate = np.random.uniform(left, right)
         cand_logp = logp(state, candidate)
@@ -136,20 +136,20 @@ def slicer(state, current, logp, width, adapt=10):
             warn('Slicing is failing to find an effective candidate. '
                  'Using a metropolis update.', stacklevel=2)
             return metropolis(state, current, logp, configs)
-    
+
     if adapt > 0:
         MA = [np.abs(left - right)]
         MA.extend([width for _ in range(adapt)])
         width = np.mean(MA)
-    
+
     return candidate, True, width
-    
+
 def hmc(state, current_value, current_momentum, logp, dlogp):
     raise NotImplementedError
 
 def ars(state, current_value):
     raise NotImplementedError
-    
+
 ###############################
 # SAMPLING CLASS DECLARATIONS #
 ###############################
@@ -165,33 +165,54 @@ class AbstractStep(object):
     @property
     def _idempotent(self):
         return False
-    
+
     def __call__(self, state):
         raise NotImplementedError
-    
+
     def __draw__(self, state):
         return self(state)
-    
+
 class Gibbs(AbstractStep):
     """
-    Sample directly from a given conditional log posterior distribution using the given kernel.
+    Sample directly from a given conditional log posterior distribution using the given kernel. Currently unused.
     """
     def __init__(self, varname, kernel):
         super(Gibbs, self).__init__(varname)
         self.kernel = kernel
-    
+
     @property
     def _idempotent(self):
         return False
-    
+
     def __call__(self, state):
         return self.kernel(state)
-    
+
 class Metropolis(AbstractStep):
     """
     Sample the given Logp using metroplis sampling
+
+    Arguments
+    ---------
+    varname :   string
+                name of variable to compute.
+    logp    :   function
+                function that, takes two arguments, value and state, and returns the log of the probability distribution being sampled.
+    jump    :   float
+                scale parameter to use in the metropolis proposal distribution
+    proposal:   scipy random distribution
+                distribution that has both `logpdf` and `rvs` methods
+    adapt_step: float > 1
+                the rate at which to adjust the jump when using tuned metropolis.
+    ar_low  :   float in [0,1]
+                lower bound on the acceptance rate of the metropolis sampler
+    ar_hi   :   float in [0,1]
+                upper bound on acceptance rate of the metrpolis sampler.
+    max_tuning: int
+                maximum number of iterations to tune the sampler.
+    debug   :   bool
+                flag denoting whether to store parameters in each iteration in the _cache.
     """
-    def __init__(self, varname, logp, jump = 1, proposal = stats.norm, 
+    def __init__(self, varname, logp, jump = 1, proposal = stats.norm,
                        adapt_step=1.01, ar_low = .2, ar_hi = .25, max_tuning = 0, debug=False):
         super(Metropolis, self).__init__(varname)
         self.jump = jump
@@ -210,7 +231,7 @@ class Metropolis(AbstractStep):
     @property
     def _idempotent(self):
         return True
-        
+
     def __call__(self, state):
         orig_val = copy.deepcopy(getattr(state, self.varname))
         new, accepted = metropolis(state, orig_val,
@@ -234,6 +255,19 @@ class Metropolis(AbstractStep):
 class Slice(AbstractStep):
     """
     Sample the given Logp using slice sampling, of Neal (2003).
+
+    Arguments
+    ------------
+    varname :   string
+                name of variable to compute.
+    logp    :   function
+                function that, takes two arguments, value and state, and returns the log of the probability distribution being sampled.
+    width   :   float
+                width of the level set to use.
+    adapt   :   int
+                number of iterations previous to use in averaging the slice width.
+    debug   :   bool
+                whether or not to save the parameters in each step to the _cache attribute.
     """
     def __init__(self, varname, logp, width=1, adapt=0, debug=False):
         super(Slice, self).__init__(varname)
@@ -242,17 +276,17 @@ class Slice(AbstractStep):
         self.adapt = adapt
         self.debug = debug
         if debug:
-            self._cache = [] 
+            self._cache = []
 
     @property
     def _idempotent(self):
         return True
-    
+
     def __call__(self, state):
         new, _, width = slicer(state, getattr(state, self.varname),
                                self.logp, self.width, self.adapt)
         self.width = width
         if self.debug:
-            self._cache.append(dict(width=self.width, 
+            self._cache.append(dict(width=self.width,
                                     logp = self.logp(state, new)))
         return new
