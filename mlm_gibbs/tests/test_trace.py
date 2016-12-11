@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
-from hlm.abstracts import Hashmap, Trace
+from mlm_gibbs.abstracts import Hashmap, Trace
 import unittest as ut
-from hlm._constants import RTOL, ATOL
+from mlm_gibbs._constants import RTOL, ATOL
 import os
 
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))

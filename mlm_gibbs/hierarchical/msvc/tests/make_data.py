@@ -1,5 +1,5 @@
-from hlm.hierarchical.msvc import MSVC
-from hlm._constants import TEST_SEED
+from mlm_gibbs.hierarchical.msvc import MSVC
+from mlm_gibbs._constants import TEST_SEED
 import pysal as ps
 import numpy as np
 import os
@@ -13,7 +13,7 @@ def build():
     Yz = Y - Y.mean()
     X = baltim[['AGE', 'LOTSZ', 'SQFT']].values
     Xz = X-X.mean(axis=0)
-    
+
     model = MSVC(Yz, Xz, coordinates=coords, n_samples=0, configs=dict(jump=.5))
     np.random.seed(TEST_SEED)
     model.draw()

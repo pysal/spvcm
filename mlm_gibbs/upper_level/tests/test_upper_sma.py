@@ -1,7 +1,7 @@
-from hlm import upper
-from hlm import utils
-from hlm.tests.utils import Model_Mixin
-from hlm.abstracts import Trace
+from mlm_gibbs import upper_level as upper
+from mlm_gibbs import utils
+from mlm_gibbs.tests.utils import Model_Mixin
+from mlm_gibbs.abstracts import Trace
 import unittest as ut
 import pandas as pd
 import os

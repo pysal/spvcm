@@ -1,7 +1,7 @@
-from hlm.utils import south
-import hlm
-from hlm._constants import TEST_SEED
-from hlm.diagnostics import psrf, mcse, hpd_interval, effective_size, geweke
+from mlm_gibbs.utils import south
+import mlm_gibbs.api as mlm
+from mlm_gibbs._constants import TEST_SEED
+from mlm_gibbs.diagnostics import psrf, mcse, hpd_interval, effective_size, geweke
 import numpy as np
 import os
 
@@ -12,7 +12,7 @@ def build():
     data = south()
     del data['W']
     del data['M']
-    model = hlm.both.MVCM(**data, n_samples=0)
+    model = mlm.both.MVCM(**data, n_samples=0)
     np.random.seed(TEST_SEED)
     print('starting South 5000, njobs=4')
     model.sample(5000,n_jobs=4)

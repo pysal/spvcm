@@ -1,6 +1,6 @@
 import unittest as ut
-from hlm import utils
-from hlm._constants import RTOL, ATOL, TEST_SEED, CLASSTYPES
+from mlm_gibbs import utils
+from mlm_gibbs._constants import RTOL, ATOL, TEST_SEED, CLASSTYPES
 from warnings import warn
 import numpy as np
 import copy
@@ -15,32 +15,35 @@ class Model_Mixin(object):
         self.squeeze = True
 
     def test_trace(self):
-        instance = self.cls(**self.inputs, n_samples=0)
+        self.inputs['n_samples'] = 0
+        instance = self.cls(**self.inputs)
         np.random.seed(TEST_SEED)
         instance.draw()
         instance.trace._assert_allclose(self.answer_trace,
                                         rtol=RTOL, atol=ATOL,
                                         ignore_shape = self.ignore_shape,
                                         squeeze=self.squeeze)
-    
+
     @ut.skip
     def test_argument_parsing(self):
         #priors, initial values, etc.
         raise NotImplementedError
-    
+
     @ut.skip
     def test_covariance_assignment(self):
         raise NotImplementedError
-    
+
 def run_with_seed(cls, env=utils.south(), seed=TEST_SEED, fprefix = ''):
     fname = str(cls).strip("'<>'").split('.')[-1].lower()
     try:
-        model = cls(**env, n_samples=0)
+        env['n_samples'] = 0
+        model = cls(**env)
     except TypeError:
         reduced = copy.deepcopy(env)
         del reduced['M']
         del reduced['W']
-        model = cls(**reduced, n_samples=0)
+        reduced['n_samples'] = 0
+        model = cls(**reduced)
     np.random.seed(TEST_SEED)
     model.draw()
     model.trace.to_df().to_csv(fprefix + fname + '.csv', index=False)

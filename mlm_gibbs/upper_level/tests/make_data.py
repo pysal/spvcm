@@ -1,8 +1,8 @@
-from hlm._constants import TEST_SEED, CLASSTYPES
-from hlm.tests.utils import run_with_seed
-from hlm import upper 
-from hlm.abstracts import Sampler_Mixin
-from hlm.utils import south
+from mlm_gibbs._constants import TEST_SEED, CLASSTYPES
+from mlm_gibbs.tests.utils import run_with_seed
+from mlm_gibbs.api import upper
+from mlm_gibbs.abstracts import Sampler_Mixin
+from mlm_gibbs.utils import south
 import pandas as pd
 import os
 

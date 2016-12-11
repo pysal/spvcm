@@ -1,8 +1,8 @@
-from hlm import both as M
-from hlm import utils
-from hlm._constants import RTOL, ATOL, TEST_SEED, CLASSTYPES
-from hlm.tests.utils import Model_Mixin, run_with_seed
-from hlm.abstracts import Sampler_Mixin, Trace
+from mlm_gibbs import both_levels as M
+from mlm_gibbs import utils
+from mlm_gibbs._constants import RTOL, ATOL, TEST_SEED, CLASSTYPES
+from mlm_gibbs.tests.utils import Model_Mixin, run_with_seed
+from mlm_gibbs.abstracts import Sampler_Mixin, Trace
 import unittest as ut
 import numpy as np
 import pandas as pd
@@ -33,7 +33,7 @@ class Test_Generic(ut.TestCase, Model_Mixin):
     def test_membership_delta_mismatch(self):
         bad_D = np.ones(self.X.shape)
         try:
-            self.cls(**self.inputs, n_samples=0)
+            self.cls(**self.inputs)
         except UserWarning:
             pass
 
@@ -44,7 +44,8 @@ class Test_Generic(ut.TestCase, Model_Mixin):
         local_input['W'] = copy.deepcopy(local_input['W_'])
         del local_input['W_']
         try:
-            self.cls(**local_input, n_samples=0)
+            local_input['n_samples'] = 0
+            self.cls(**local_input)
         except (UserWarning, AssertionError):
             pass
 
@@ -52,6 +53,7 @@ class Test_Generic(ut.TestCase, Model_Mixin):
         local_input = copy.deepcopy(self.inputs)
         del local_input['membership']
         try:
-            self.cls(**local_input, n_samples=0)
+            local_input['n_samples'] = 0
+            self.cls(**local_input)
         except UserWarning:
             pass

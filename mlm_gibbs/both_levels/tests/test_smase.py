@@ -1,6 +1,6 @@
-from hlm import both as M
-from hlm.tests.utils import Model_Mixin
-from hlm.abstracts import Trace
+from mlm_gibbs import both_levels as M
+from mlm_gibbs.tests.utils import Model_Mixin
+from mlm_gibbs.abstracts import Trace
 import unittest as ut
 import pandas as pd
 from .make_data import FULL_PATH

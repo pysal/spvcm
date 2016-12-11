@@ -1,1 +1,1 @@
-recursive-include mlm_gibbs/test/data *.csv *.json
+recursive-include mlm_gibbs/test*

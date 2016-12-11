@@ -10,4 +10,3 @@ setup(name='mlm_gibbs',
       packages= find_packages(),
       install_requires=['numpy','scipy','pysal','pandas','seaborn'],
       zip_safe=False)
-      

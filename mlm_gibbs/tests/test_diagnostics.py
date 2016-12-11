@@ -1,9 +1,9 @@
 import unittest as ut
 import numpy as np
-from hlm.utils import south
-from hlm.diagnostics import psrf, geweke, effective_size, hpd_interval, summarize, mcse
-from hlm._constants import RTOL, ATOL, TEST_SEED
-from hlm.abstracts import Trace, Hashmap
+from mlm_gibbs.utils import south
+from mlm_gibbs.diagnostics import psrf, geweke, effective_size, hpd_interval, summarize, mcse
+from mlm_gibbs._constants import RTOL, ATOL, TEST_SEED
+from mlm_gibbs.abstracts import Trace, Hashmap
 import os
 import json
 FULL_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -41,7 +41,7 @@ class Test_PSRF(ut.TestCase):
             np.testing.assert_allclose(v, np.squeeze(self.known_gr[k]),
                                        rtol=RTOL, atol=ATOL,
                                        err_msg='Failed in {}'.format(k))
-    
+
     def test_options(self):
         exp_brooks = psrf(trace=self.mockmodel.trace)
         for k,v in exp_brooks.items():

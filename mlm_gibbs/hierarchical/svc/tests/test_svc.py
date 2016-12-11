@@ -1,7 +1,7 @@
-from hlm.hierarchical.svc import SVC
-from hlm.abstracts import Trace
-from hlm._constants import TEST_SEED, RTOL, ATOL
-from hlm.utils import no_op
+from mlm_gibbs.hierarchical.svc import SVC
+from mlm_gibbs.abstracts import Trace
+from mlm_gibbs._constants import TEST_SEED, RTOL, ATOL
+from mlm_gibbs.utils import no_op
 import unittest as ut
 import pandas as pd
 import pysal as ps
@@ -13,7 +13,7 @@ FULL_PATH = os.path.dirname(os.path.abspath(__file__))
 
 class Test_SVC(ut.TestCase):
     def setUp(self):
-        
+
         self.answer = Trace.from_csv(FULL_PATH + '/data/svc.csv')
         self.inputs = dict()
         baltim = ps.pdio.read_files(ps.examples.get_path('baltim.shp'))
@@ -25,9 +25,10 @@ class Test_SVC(ut.TestCase):
         self.inputs.update({'Y':Yz, 'X':Xz, 'coordinates':coords})
         self.ignore_shape = True
         self.test_trace = no_op
-    
+
     def test_draw(self):
-        instance = SVC(**self.inputs, n_samples=0)
+        self.inputs['n_samples'] = 0
+        instance = SVC(**self.inputs)
         np.random.seed(TEST_SEED)
         instance.draw()
         instance.trace._assert_allclose(self.answer,

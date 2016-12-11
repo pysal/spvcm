@@ -1,6 +1,6 @@
-from hlm import lower
-from hlm.tests.utils import Model_Mixin
-from hlm.abstracts import Trace
+from mlm_gibbs import lower_level as lower
+from mlm_gibbs.tests.utils import Model_Mixin
+from mlm_gibbs.abstracts import Trace
 import unittest as ut
 import pandas as pd
 import os
