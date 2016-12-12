@@ -3,5 +3,7 @@
 *.swo
 .ipynb_checkpoints
 *.png
-*.csv
 matlab/
+.idea/*
+laboratory/*
+*.egg-info
