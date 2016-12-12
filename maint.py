@@ -8,12 +8,12 @@ def rebuild_test_data(force=False):
         return
     else:
         warnings.warn('Proceeding to overwrite tests...')
-    from mlm_gibbs.both_levels.tests import make_data as bltests
-    from mlm_gibbs.upper_level.tests import make_data as ultests
-    from mlm_gibbs.lower_level.tests import make_data as lltests
-    from mlm_gibbs.hierarchical.msvc.tests import make_data as msvctests
-    from mlm_gibbs.hierarchical.svc.tests import make_data as svctests
-    from mlm_gibbs.tests import make_data as overall
+    from spvcm.both_levels.tests import make_data as bltests
+    from spvcm.upper_level.tests import make_data as ultests
+    from spvcm.lower_level.tests import make_data as lltests
+    from spvcm.hierarchical.msvc.tests import make_data as msvctests
+    from spvcm.hierarchical.svc.tests import make_data as svctests
+    from spvcm.tests import make_data as overall
     for module in [bltests, ultests, lltests, overall, msvctests, svctests]:
         module.build()
 

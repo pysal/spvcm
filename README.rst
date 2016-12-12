@@ -32,13 +32,13 @@ Usage
 -------------------
 
 To use the package, start up a Python interpreter and run:
-``import mlm_gibbs.api as mlm``
+``import spvcm.api as spvcm``
 
 Then, many differnet variance components model specificaions are available in:
 
-``mlm.both``
-``mlm.upper``
-``mlm.lower``
+``spvcm.both``
+``spvcm.upper``
+``spvcm.lower``
 
 For more thorough directions, consult the Jupyter Notebook, ``using the sampler.ipynb``, which is attached with the package. 
 

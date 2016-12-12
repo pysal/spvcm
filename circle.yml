@@ -26,4 +26,4 @@ dependencies:
 test:
     override:
         - ls -al
-        - nosetests mlm_gibbs
+        - nosetests spvcm
