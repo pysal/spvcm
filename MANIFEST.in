@@ -3,3 +3,5 @@ recursive-include mlm_gibbs/both_levels/tests/data *.csv *.json
 recursive-include mlm_gibbs/lower_level/tests/data *.csv *.json
 recursive-include mlm_gibbs/upper_level/tests/data *.csv *.json
 graft mlm_gibbs/examples
+include using_the_sampler.ipynb
+include using_the_sampler.html
