@@ -46,7 +46,7 @@ For more thorough directions, consult the Jupyter Notebook, ``using the sampler.
 Citation
 -------------------
 
-Levi John Wolf. (2016). `Gibbs Sampling for a class of  spatially-correlated variance components models`. `In Progress.`
+Levi John Wolf. (2016). `Gibbs Sampling for a class of  spatially-correlated variance components models`. University of Chicago Center for Spatial Data Science Technical Report. 
 
 .. _Distribution: https://https://www.continuum.io/downloads
 .. _Analytics: https://continuum.io
