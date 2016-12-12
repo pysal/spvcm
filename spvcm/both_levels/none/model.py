@@ -250,7 +250,7 @@ class MVCM(Base_MVCM):
                  extra_traced_params = None,
                  priors=None,
                  starting_values=None,
-                 center=True,
+                 center=False,
                  scale=False
                  ):
 

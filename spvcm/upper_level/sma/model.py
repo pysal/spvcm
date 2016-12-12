@@ -220,7 +220,7 @@ class Upper_SMA(Base_Upper_SMA):
                  configs=None,
                  starting_values=None,
                  truncation=None,
-                 center=True,
+                 center=False,
                  scale=False):
         _, M = verify.weights(None, M, transform=transform)
         self.M = M

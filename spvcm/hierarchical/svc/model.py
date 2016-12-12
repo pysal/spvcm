@@ -48,7 +48,7 @@ class SVC(Sampler_Mixin):
                  dmetric='euclidean',
                  correlation_function=nexp,
                  verbose=False,
-                 center=True,
+                 center=False,
                  rescale_dists=True):
         if center:
             X = verify_center(X)

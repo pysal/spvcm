@@ -158,7 +158,7 @@ class Lower_SMA(Base_Lower_SMA):
                  configs=None,
                  starting_values=None,
                  truncation=None,
-                 center=True,
+                 center=False,
                  scale=False):
         W,_ = verify.weights(W, None, transform=transform)
         self.W = W

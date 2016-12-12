@@ -221,7 +221,7 @@ class Upper_SE(Base_Upper_SE):
                  configs=None,
                  starting_values=None,
                  truncation=None,
-                 center=True,
+                 center=False,
                  scale=False,
                  tuning=0):
         _, M = verify.weights(None, M, transform=transform)

@@ -137,7 +137,7 @@ class SESMA(Base_SESMA):
                  priors=None,
                  configs=None,
                  starting_values=None,
-                 center=True,
+                 center=False,
                  scale=False):
         W,M = verify.weights(W,M, transform=transform)
         self.M = M

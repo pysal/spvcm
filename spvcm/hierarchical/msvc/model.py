@@ -30,7 +30,7 @@ class MSVC(Sampler_Mixin):
                  correlation_function=nexp,
                  dmetric='euclidean',
                  verbose=False,
-                 center=True,
+                 center=False,
                  constant='local',
                  rescale_dists=True):
         super(MSVC, self).__init__()

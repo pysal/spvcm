@@ -138,7 +138,7 @@ class SESE(Base_SESE):
                  configs=None,
                  starting_values=None,
                  truncation=None,
-                 center=True,
+                 center=False,
                  scale=False):
         W,M = verify.weights(W, M, transform=transform)
         self.M = M

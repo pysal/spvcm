@@ -157,7 +157,7 @@ class Lower_SE(Base_Lower_SE):
                  starting_values=None,
                  configs=None,
                  truncation=None,
-                 center=True,
+                 center=False,
                  scale=False):
         W,_ = verify.weights(W, None, transform=transform)
         self.W = W

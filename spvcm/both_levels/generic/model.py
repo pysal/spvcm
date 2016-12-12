@@ -392,7 +392,7 @@ class Generic(Base_Generic):
                  starting_values=None,
                  configs=None,
                  truncation=None,
-                 center=True,
+                 center=False,
                  scale=False):
         W,M = verify.weights(W,M, transform=transform)
         self.M = M
