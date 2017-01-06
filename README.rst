@@ -4,8 +4,11 @@
 
 This is a package to estimate spatially-correlated variance components models, 
 an equivalent Bayesian model formulation to Varying-Intercept models. 
+
 *author*: Levi John Wolf
+
 *email*: ``levi.john.wolf@gmail.com``
+
 *institution*: Arizona State University & University of Chicago Center for Spatial Data Science
 
 --------------------
@@ -40,7 +43,7 @@ Then, many differnet variance components model specificaions are available in:
 ``spvcm.upper``
 ``spvcm.lower``
 
-For more thorough directions, consult the Jupyter Notebook, ``using the sampler.ipynb``, which is attached with the package. 
+For more thorough directions, consult the Jupyter Notebook, ``using the sampler.ipynb``, which is provided in the ``spvcm/examples`` directory.  
 
 -------------------
 Citation
