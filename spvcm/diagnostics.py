@@ -53,7 +53,7 @@ def summarize(model = None, trace = None, chain=None, varnames=None,
                 provides the output for each chain. A level 1 summary provides output
                 grouped over all chains.
     """
-    _resolve_to_trace(model, trace, chain, varnames)
+    trace = _resolve_to_trace(model, trace, chain, varnames)
     dfs = trace.to_df()
     if isinstance(dfs, list):
         multi_index = ['Chain_{}'.format(i) for i in range(len(dfs))]
@@ -517,6 +517,17 @@ def _hpd_interval(data, p=.95):
     tail = head+N_in
     pivot = _np.argmin(data[tail] - data[head])
     return data[pivot], data[pivot+N_in]
+
+def point_estimates(model=None, trace=None, chain=None, 
+                    burnin=0,thin=1,
+                    varnames=None, statistic=np.median):
+    """
+    Get a point estimate for the posterior
+    """
+    trace = _resolve_to_trace(model, trace, chain, varnames)
+    trace = _resolve_to_trace(None, trace[burnin::thin], None, varnames)
+    return trace.map(statistic)
+
 
 ############################################
 # Markov Chain Monte Carlo Standard Errors #

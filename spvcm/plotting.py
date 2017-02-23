@@ -353,3 +353,35 @@ def corrplot(m, burn=0, thin=None,
     ax[0].set_xlabel('Distance')
     ax[0].set_ylabel('Inter-Observation $\\rho$')
     return f,ax
+
+def hpd_trajplot(model=None, trace=None, chain=None, varnames=None,
+                 alpha=.95, n_splits=100,
+                 fig_kw=dict(), hpdi_kw=dict(), trace_kw=dict(), width_kw=dict()):
+    trace = diag._resolve_to_trace(model, trace, chain, varnames)
+    if varnames is None:
+        varnames = trace.varnames
+    p = len(varnames)
+    f,ax = plt.subplots(p,2, **fig_kw)
+    pieces = trace.map(np.array_split, indices_or_sections=n_splits)
+    hpds = dict()
+    for i, varname in enumerate(varnames):
+        bits = pieces[varname]
+        hpds[varname] = []
+        for i,bit in enumerate(bits):
+            try:
+                cumulant = np.hstack((cumulant, bit))
+                hpd = diag.hpd_interval(chain=cumulant, alpha=alpha)
+            except NameError:
+                cumulant = bit
+                hpd = diag.hpd_interval(chain=cumulant, alpha=alpha)
+            finally:
+                hpds[varname].append(hpd)
+        this_hpdset = np.hstack(hpds[varname]).reshape(-1,2)
+        keff = len(this_hpdset)
+        support = np.arange(0,keff)
+        i,ax[0].plot(support, this_hpdset.T[0], **hpdi_kw)
+        i,ax[0].plot(support, this_hpdset.T[1], **hpdi_kw)
+        i,ax[0].plot(trace[varname], **trace_kw)
+        widths = np.subtract.reduce(this_hpdset, axis=1)
+        i,ax[1].plot(support, widths, **width_kw)
+    return f,ax
