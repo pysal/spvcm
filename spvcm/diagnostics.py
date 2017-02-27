@@ -520,7 +520,7 @@ def _hpd_interval(data, p=.95):
 
 def point_estimates(model=None, trace=None, chain=None, 
                     burnin=0,thin=1,
-                    varnames=None, statistic=np.median):
+                    varnames=None, statistic=_np.median):
     """
     Get a point estimate for the posterior
     """
