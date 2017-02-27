@@ -2,8 +2,9 @@
 ``spvcm``: Gibbs sampling for spatially-correlated variance-components
 ===========================================================================
 
-This is a package to estimate spatially-correlated variance components models, 
-an equivalent Bayesian model formulation to Varying-Intercept models. 
+.. image:: https://circleci.com/gh/ljwolf/spvcm.png?circle-token=:circle-token
+
+This is a package to estimate spatially-correlated variance components models/varying intercept models. In addition to a general toolkit to conduct Gibbs sampling in Python, the package also provides an interface to PyMC3 and CODA. For a complete overview, consult the walkthrough_.
 
 *author*: Levi John Wolf
 
@@ -53,4 +54,4 @@ Levi John Wolf. (2016). `Gibbs Sampling for a class of  spatially-correlated var
 
 .. _Distribution: https://https://www.continuum.io/downloads
 .. _Analytics: https://continuum.io
-.. _package: 
+.. _walkthrough: https://github.com/ljwolf/spvcm/blob/master/spvcm/examples/using_the_sampler.ipynb
