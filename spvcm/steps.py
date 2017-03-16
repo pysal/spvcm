@@ -54,28 +54,28 @@ def metropolis(state, current, proposal, logp, jump):
     new (or current) parameter value, and boolean indicating whether or not a
     new proposal was accepted.
     """
-    try:
-        current_logp = logp(state, current)
-        new_val = proposal.rvs(loc=current, scale=jump)
-        new_logp = logp(state, new_val)
-        forwards = proposal.logpdf(new_val, loc=current, scale=jump)
-        backward = proposal.logpdf(current, loc=new_val, scale=jump)
+    #try:
+    current_logp = logp(state, current)
+    new_val = proposal.rvs(loc=current, scale=jump)
+    new_logp = logp(state, new_val)
+    forwards = proposal.logpdf(new_val, loc=current, scale=jump)
+    backward = proposal.logpdf(current, loc=new_val, scale=jump)
 
-        hastings_factor = backward - forwards
-        r = new_logp - current_logp + hastings_factor
+    hastings_factor = backward - forwards
+    r = new_logp - current_logp + hastings_factor
 
-        r = np.min((0, r))
-        u = np.log(np.random.random())
-    except:
-        print(current)
-        print(new_val)
-        print(new_logp)
-        print(current_logp)
-        print(backward)
-        print(forwards)
-        print(r)
-        print(u)
-        raise
+    r = np.min((0, r))
+    u = np.log(np.random.random())
+    #except:
+    #    print(current)
+    #    print(new_val)
+    #    print(new_logp)
+    #    print(current_logp)
+    #    print(backward)
+    #    print(forwards)
+    #    print(r)
+    #    print(u)
+    #    raise
 
     if u < r:
         outval = new_val

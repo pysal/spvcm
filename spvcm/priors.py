@@ -8,6 +8,7 @@ def Constant():
     """
     def constant(val):
         return 0
+    return constant
 
 constant = Constant()
 
