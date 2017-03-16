@@ -79,7 +79,8 @@ class Sampler_Mixin(object):
 
     def _parallel_sample(self, n_samples, n_jobs):
         """
-        Run n_jobs parallel samples of a given model. Not intended to be called directly, and should be called by model.sample.
+        Run n_jobs parallel samples of a given model. 
+        Not intended to be called directly, and should be called by model.sample.
         """
         models = [copy.deepcopy(self) for _ in range(n_jobs)]
         for i, model in enumerate(models):
@@ -103,6 +104,7 @@ class Sampler_Mixin(object):
         if self.cycles > 0:
             new_traces = []
             for i, model in enumerate(results):
+                # model.trace.chains is always single-chain, since we've broken everything into single chains
                 new_traces.append(Hashmap(**{k:param + model.trace.chains[0][k]
                                              for k, param in self.trace.chains[i].items()}))
             new_trace = Trace(*new_traces)
