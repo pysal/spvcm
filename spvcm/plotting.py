@@ -79,6 +79,9 @@ def seplot(model=None, trace=None, chain=None, varnames=None,
            burn=0, thin=None, N_bins=200,
            plot_kw=None, fig_kw=None, ax=None):
     """
+    This plots the markov chain monte carlo standard error 
+    as a function of iterations. 
+
     Arguments
     ---------
     model   :   Any model object.
@@ -148,6 +151,9 @@ def rollplot(model=None, trace=None, chain=None, varnames=None,
              order=100, roller=pd.rolling_mean,
              burn=0, thin=None, plot_kw=None, fig_kw=None, ax=None):
     """
+    This plots a rolling window function, `roller`, against all parameters contained
+    in the model, trace, or chain. 
+
     Arguments
     ---------
     model   :   Any model object.
@@ -357,6 +363,45 @@ def corrplot(m, burn=0, thin=None,
 def hpd_trajplot(model=None, trace=None, chain=None, varnames=None,
                  alpha=.95, n_splits=100,
                  fig_kw=dict(), hpdi_kw=dict(), trace_kw=dict(), width_kw=dict()):
+    """
+    This plots the middle alpha% interval around the parameter over n_splits blocks. 
+
+     ---------
+    model   :   Any model object.
+                must have an attached `trace` attribute. Takes precedence over
+                `trace` and `chain` arguments.
+    trace   :   abstracts.Trace
+                a trace object containing data to compute the diagnostic
+    chain   :   np.ndarray
+                an array indexed by (m,n[,p]) containing m parallel runs of n samples
+                of p covariates.
+    varnames:   str or list of str
+                set of variates to extract from the model or trace to to compute the
+                statistic.
+    alpha   :   float
+                the percentile to use for the HPD interval plotted in each chunk
+    n_splits:   int
+                the number of chunks of the chain to estimate the HPD over. 
+    burn    :   int
+                number of iterations to discard from the front of the chain. If negative, number of iterations to keep from the tail of the chain.
+    thin    :   int
+                step to thin the chain. Picks every `thin`th observation.
+    fig_kw  :   dict/keyword arguments
+                passed to the plt.subplots() call
+    hpdi_kw :   dict/keyword arguments
+                passed to the diagnostics.hpd_interval() call for the hpd envelope
+    trace_kw:   dict/keyword arguments
+                passed to the plt.plot() call for the trace of the parameters
+    width_kw:   dict/keyword arguments
+                passed to the plt.plot() call for the intervals of parameters
+    ax      :   matplotlib axis
+                pass if you want to plot this on an existing set of axes.
+
+    Returns
+    --------
+    figure,axis tuple or, if ax is passed, ax
+
+    """
     trace = diag._resolve_to_trace(model, trace, chain, varnames)
     if varnames is None:
         varnames = trace.varnames
