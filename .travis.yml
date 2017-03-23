@@ -26,7 +26,7 @@ before_install:
 install:
     - python setup.py install
 script:
-    - nosetests spvcm
+    - travis_wait nosetests spvcm
 
 notifications:
     email:
