@@ -133,9 +133,9 @@ class Sampler_Mixin(object):
         if hasattr(st, 'Tau2'):
             st.Tau2 += np.random.uniform(0,5)
         if hasattr(st, 'Lambda'):
-            st.Lambda += np.random.uniform(-.5,.5)
+            st.Lambda += np.random.uniform(-.25,.25)
         if hasattr(st, 'Rho'):
-            st.Rho += np.random.uniform(-.5,.5)
+            st.Rho += np.random.uniform(-.25,.25)
 
     def _finalize(self, **args):
         """

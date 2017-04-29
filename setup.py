@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name='spvcm',
-      version='0.0.6',
+      version='0.0.7',
       description='Fit spatial multilevel models and diagnose convergence',
       url='https://github.com/ljwolf/spvcm',
       author='Levi John Wolf',
