@@ -7,7 +7,6 @@ branches:
 
 python:
     - 2.7
-    - 3.4
     - 3.5
     - 3.6
 
@@ -26,11 +25,11 @@ before_install:
 install:
     - python setup.py install
 script:
-    - travis_wait 25 nosetests spvcm
+    - travis_wait 45 nosetests spvcm
 
 notifications:
     email:
         recipients:
-            - levi.john.wolf@gmail.com
+            - levi.john.wolf+travis@gmail.com
         on_success: change
         on_failure: always
