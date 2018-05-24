@@ -11,7 +11,7 @@ This is a package to estimate spatially-correlated variance components models/va
 
 *email*: ``levi.john.wolf@gmail.com``
 
-*institution*: Arizona State University & University of Chicago Center for Spatial Data Science
+*institution*: University of Bristol & University of Chicago Center for Spatial Data Science
 
 --------------------
 Installation
