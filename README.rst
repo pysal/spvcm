@@ -13,6 +13,8 @@ This is a package to estimate spatially-correlated variance components models/va
 
 *institution*: University of Bristol & University of Chicago Center for Spatial Data Science
 
+*preprint*: on the `Open Science Framework`_
+
 --------------------
 Installation
 --------------------
@@ -56,3 +58,4 @@ Levi John Wolf. (2016). `Gibbs Sampling for a class of  spatially-correlated var
 .. _Distribution: https://https://www.continuum.io/downloads
 .. _Analytics: https://continuum.io
 .. _walkthrough: https://github.com/ljwolf/spvcm/blob/master/spvcm/examples/using_the_sampler.ipynb
+.. _`Open Science Framework`: https://osf.io/ks6t3/
