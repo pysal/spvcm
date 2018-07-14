@@ -19,8 +19,8 @@ before_install:
     - conda create -y -q -n test-env python=$TRAVIS_PYTHON_VERSION 
     - source activate test-env
     - conda install -y numpy scipy pandas six pip
-    - conda install -y nose seaborn dill statsmodels
-    - pip install geopandas pysal
+    - conda install -y nose seaborn dill statsmodels geopandas
+    - pip install pysal
 
 install:
     - python setup.py install
