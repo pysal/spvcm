@@ -2,7 +2,7 @@ from __future__ import division
 import scipy.stats as stats
 import numpy as np
 from warnings import warn
-from ...steps import metropolis
+from ..steps import metropolis
 
 def logp_phi(state, phi):
     """
