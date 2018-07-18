@@ -1,4 +1,4 @@
-from .svc import SVC
+from spvcm.svc import SVC 
 from spvcm._constants import TEST_SEED
 from spvcm.utils import baltim
 import numpy as np
