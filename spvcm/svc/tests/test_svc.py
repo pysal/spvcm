@@ -1,7 +1,7 @@
-from spvcm.hierarchical.svc import SVC
-from spvcm.abstracts import Trace
-from spvcm._constants import TEST_SEED, RTOL, ATOL
-from spvcm.utils import no_op
+from ..model import SVC
+from ...abstracts import Trace
+from ..._constants import TEST_SEED, RTOL, ATOL
+from ...utils import no_op
 import unittest as ut
 import pandas as pd
 import pysal as ps
