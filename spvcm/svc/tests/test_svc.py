@@ -3,7 +3,6 @@ from ...abstracts import Trace
 from ..._constants import TEST_SEED, RTOL, ATOL
 from ...utils import no_op
 import unittest as ut
-import pandas as pd
 import pysal as ps
 import numpy as np
 import os
@@ -30,7 +29,7 @@ class Test_SVC(ut.TestCase):
         self.inputs['n_samples'] = 0
         instance = SVC(**self.inputs)
         np.random.seed(TEST_SEED)
-        instance.draw()
+        instance.sample(1)
         instance.trace._assert_allclose(self.answer,
                                         rtol=RTOL, atol=ATOL,
                                         ignore_shape = self.ignore_shape,

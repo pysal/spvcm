@@ -12,7 +12,7 @@ def build():
     inputs.update(dict(configs=dict(jump=.5)))
     model = SVC(**inputs, n_samples=0)
     np.random.seed(TEST_SEED)
-    model.sample(10)
+    model.sample(1)
     model.trace.to_csv(FULL_PATH + '/data/svc.csv')
 
 
