@@ -34,6 +34,13 @@ def thru_op(*args, **kws):
     else:
         return args, kws
 
+def zero_op(*args, **kws):
+    """
+    this s a zero op. It takes any arguments, keyword
+    or positional, and returns zero.
+    """
+    return 0
+
 ##########################
 # BUILD EXAMPLE DATASETS #
 ##########################

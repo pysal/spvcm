@@ -48,6 +48,8 @@ class Base_Lower_SMA(Base_Generic):
         self.state.Psi_2i = ind_covariance
 
         self.configs.Lambda = no_op
+        self.state.Lambda = 0
+
 
         if n_samples > 0:
             try:

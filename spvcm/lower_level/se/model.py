@@ -49,6 +49,7 @@ class Base_Lower_SE(Base_Generic):
         self.state.Psi_2i = ind_covariance #same as precision
         self.configs.Rho.logp = logp_rho_prec
         self.configs.Lambda = no_op
+        self.state.Lambda = 0
 
         if n_samples > 0:
             try:
