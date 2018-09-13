@@ -58,7 +58,7 @@ class Base_MVCM(Sampler_Mixin):
 
     def _setup_priors(self, Sigma2_a0=.001, Sigma2_b0 = .001,
                       Betas_cov0 = None, Betas_mean0 = None,
-                      Tau2_a0 = .001, Tau2_b0 = .0001):
+                      Tau2_a0 = .001, Tau2_b0 = .001):
         ## Prior specifications
         st = self.state
         st.Sigma2_a0 =  Sigma2_a0
