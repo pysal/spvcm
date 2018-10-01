@@ -160,6 +160,10 @@ class Lower_SE(Base_Lower_SE):
                  truncation=None,
                  center=False,
                  scale=False):
+        if X is None:
+            X = np.ones_like(Y)
+            center=False
+            scale=False
         W,_ = verify.weights(W, None, transform=transform)
         self.W = W
         Wmat = W.sparse
