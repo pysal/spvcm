@@ -20,7 +20,7 @@ before_install:
     - source activate test-env
     - conda install -y numpy scipy pandas six pip
     - conda install -y nose seaborn dill statsmodels geopandas
-    - pip install pysal
+    - pip install libpysal
 
 install:
     - python setup.py install
