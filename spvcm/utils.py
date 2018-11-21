@@ -76,7 +76,7 @@ def south(df=False):
     W2 = libpysal.weights.Queen.from_shapefile(libpysal.examples.get_path('us48.shp'),
                                                idVariable='STATE_NAME')
     W2 = libpysal.weights.set_operations.w_subset(W2, ids=data.STATE_NAME.unique().tolist()) #only keep what's in the data
-    W1 = libpysal.weigths.Queen.from_shapefile(libpysal.examples.get_path('south.shp'),
+    W1 = libpysal.weights.Queen.from_shapefile(libpysal.examples.get_path('south.shp'),
                                             idVariable='FIPS')
     W1 = libpysal.weights.set_operations.w_subset(W1, ids=data.FIPS.tolist()) #again, only keep what's in the data
 
