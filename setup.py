@@ -15,6 +15,6 @@ setup(name='spvcm',
       author_email='levi.john.wolf@gmail.com',
       license='3-Clause BSD',
       packages= find_packages(),
-      install_requires=['numpy','scipy','pysal','pandas','seaborn'],
+      install_requires=['numpy','scipy','libpysal', 'spreg', 'pandas','seaborn'],
       include_package_data=True,
       zip_safe=False)
