@@ -20,8 +20,8 @@ before_install:
     - conda install -y numpy scipy pandas six pip
     - conda install -y nose seaborn dill statsmodels geopandas
     - pip install libpysal spreg
-    - conda install -y -c r r-essentials r-coda
-    - conda install -y rpy2
+    - travis_wait conda install -y -c r r-essentials r-coda
+    - travis_wait conda install -y rpy2
 
 install:
     - python setup.py install
