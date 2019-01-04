@@ -6,7 +6,6 @@ branches:
     - dev
 
 python:
-    - 2.7
     - 3.5
     - 3.6
 
@@ -20,11 +19,12 @@ before_install:
     - source activate test-env
     - conda install -y numpy scipy pandas six pip
     - conda install -y nose seaborn dill statsmodels geopandas
-    - pip install pysal
+    - pip install libpysal spreg
 
 install:
     - python setup.py install
 script:
+    - python -c 'from spvcm import diagnostics; print(diagnostics._HAS_CODA, diagnostics._HAS_RPY2)'
     - travis_wait 45 nosetests spvcm
 
 notifications:

@@ -9,7 +9,7 @@ from ...both_levels.generic import Base_Generic
 from ...both_levels.generic.model import SAMPLERS as generic_parameters
 from ... import verify
 from ...utils import se_covariance, se_precision, ind_covariance, splogdet, chol_mvn
-from pysal.spreg.utils import spdot
+from spreg.utils import spdot
 
 
 
@@ -224,6 +224,10 @@ class Upper_SE(Base_Upper_SE):
                  center=False,
                  scale=False,
                  tuning=0):
+        if X is None:
+            X = np.ones_like(Y)
+            center=False
+            scale=False
         _, M = verify.weights(None, M, transform=transform)
         self.M = M
         Mmat = M.sparse

@@ -5,3 +5,4 @@ recursive-include spvcm/upper_level/tests/data *.csv *.json
 graft spvcm/examples
 include using_the_sampler.ipynb
 include using_the_sampler.html
+include README.rst
