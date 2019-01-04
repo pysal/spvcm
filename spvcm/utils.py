@@ -36,7 +36,7 @@ def thru_op(*args, **kws):
 
 def zero_op(*args, **kws):
     """
-    this s a zero op. It takes any arguments, keyword
+    this is a zero op. It takes any arguments, keyword
     or positional, and returns zero.
     """
     return 0
