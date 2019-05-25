@@ -16,6 +16,7 @@ before_install:
     - export PATH=`pwd`/miniconda/bin:$PATH
     - conda update --yes conda
     - conda config --append channels conda-forge
+    - conda config --set channel_priority strict
     - conda create -y -q -n test-env python=$TRAVIS_PYTHON_VERSION 
     - source activate test-env
     - conda install -y numpy scipy pandas six pip
