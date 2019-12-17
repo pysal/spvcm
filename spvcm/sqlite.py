@@ -3,13 +3,12 @@ import numpy as np
 import os
 import sys
 from warnings import warn
+import pickle as pkl
 try:
     import dill
-    import pickle as pkl
 except ImportError as E:
     msg = 'The `dill` module is required to use the sqlite backend fully.'
     warn(msg, stacklevel=2)
-    import pickle as pkl
 LEGACY_PYTHON = sys.version_info[0] < 3
 
 CREATE_TEMPLATE = "CREATE TABLE {} (iteration INTEGER PRIMARY KEY, {})"
