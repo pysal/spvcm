@@ -2,7 +2,7 @@ import sqlite3 as sql
 import numpy as np
 import os
 import sys
-from warnings import warn
+import warnings
 import pickle as pkl
 
 LEGACY_PYTHON = sys.version_info[0] < 3
@@ -141,7 +141,7 @@ def maybe_deserialize(maybe_bytestring):
         import dill
     except ImportError as E:
         msg = 'The `dill` module is required to use the sqlite backend fully.'
-        warn(msg, stacklevel=2)
+        warnings.warn(msg, stacklevel=2)
     
     if isinstance(maybe_bytestring, (list, tuple)):
         return type(maybe_bytestring)([maybe_deserialize(byte_element) 
