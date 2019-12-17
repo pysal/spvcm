@@ -50,6 +50,10 @@ class Sampler_Mixin(object):
         except ImportError:
             from .utils import thru_op
             tqdm = thru_op
+            msg = '`tqdm` is not available. '
+            msg += 'Using `spvcm.utils.thru_op` in place of `tqdm`.'
+            
+            warn(msg, stacklevel=2)
             
         if n_jobs > 1:
            self._parallel_sample(n_samples, n_jobs)
