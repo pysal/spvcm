@@ -6,18 +6,14 @@ import multiprocessing as mp
 import pandas as pd
 import os
 
-
 from .sqlite import head_to_sql, start_sql
 from .plotting import plot_trace
 from collections import OrderedDict
-try:
-    from tqdm import tqdm
-    import six
-    if not six.PY3:
-        range = xrange
-except ImportError:
-    from .utils import thru_op
-    tqdm = thru_op
+
+import six
+if not six.PY3:
+    range = xrange
+
 
 __all__ = ['Sampler_Mixin', 'Hashmap', 'Trace']
 
@@ -49,6 +45,12 @@ class Sampler_Mixin(object):
         -------
         Implicitly updates all values in place, returns None
         """
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            from .utils import thru_op
+            tqdm = thru_op
+            
         if n_jobs > 1:
            self._parallel_sample(n_samples, n_jobs)
            return
