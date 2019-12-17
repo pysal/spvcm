@@ -63,7 +63,8 @@ def south(df=False):
     and the dataframe contains the raw dataset
     """
     import geopandas
-    data = geopandas.read_file(libpysal.examples.get_path('south.shp'))
+    south = libpysal.examples.load_example('South')
+    data = geopandas.read_file(south.get_path('south.shp'))
     data = data[data.STATE_NAME != 'District of Columbia']
     X = data[['GI89', 'BLK90', 'HR90']].values
     N = X.shape[0]
@@ -72,11 +73,12 @@ def south(df=False):
     J = Z.shape[0]
 
     Y = data.DNL90.values.reshape(-1,1)
-
-    W2 = libpysal.weights.Queen.from_shapefile(libpysal.examples.get_path('us48.shp'),
+    
+    us48 = libpysal.examples.load_example('us_income')
+    W2 = libpysal.weights.Queen.from_shapefile(us48.get_path('us48.shp'),
                                                idVariable='STATE_NAME')
     W2 = libpysal.weights.set_operations.w_subset(W2, ids=data.STATE_NAME.unique().tolist()) #only keep what's in the data
-    W1 = libpysal.weights.Queen.from_shapefile(libpysal.examples.get_path('south.shp'),
+    W1 = libpysal.weights.Queen.from_shapefile(south.get_path('south.shp'),
                                             idVariable='FIPS')
     W1 = libpysal.weights.set_operations.w_subset(W1, ids=data.FIPS.tolist()) #again, only keep what's in the data
 
@@ -106,7 +108,8 @@ def baltim(df=False):
     dataframe contains the raw data of the baltimore example
     """
     import geopandas
-    baltim = geopandas.read_file(libpysal.examples.get_path('baltim.shp'))
+    baltim = libpysal.examples.load_example('Baltimore')
+    baltim = geopandas.read_file(baltim.get_path('baltim.shp'))
     coords = baltim[['X', 'Y']].values
     Y = np.log(baltim.PRICE.values).reshape(-1,1)
     Yz = Y - Y.mean()
