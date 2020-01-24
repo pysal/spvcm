@@ -29,6 +29,7 @@ before_install:
 install:
     - python setup.py install
 script:
+    - python -c 'import libpysal; libpysal.examples.load_example("South"); libpysal.examples.load_example("Baltimore")'
     - python -c 'from spvcm import diagnostics; print(diagnostics._HAS_CODA, diagnostics._HAS_RPY2)'
     - travis_wait 45 nosetests spvcm
 
