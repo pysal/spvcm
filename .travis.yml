@@ -5,17 +5,22 @@ branches:
     - master
     - dev
 
-python:
-    - 3.5
-    - 3.6
+matrix:
+  include:
+    - python: 3.6
+    - python: 3.7
+      dist: xenial
+      sudo: true
 
 before_install:
-    - wget https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
+    - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
     - chmod +x miniconda.sh
     - ./miniconda.sh -b -p ./miniconda
     - export PATH=`pwd`/miniconda/bin:$PATH
     - conda update --yes conda
-    - conda create -y -q -n test-env python=$TRAVIS_PYTHON_VERSION 
+    - conda config --append channels conda-forge
+    - conda config --set channel_priority strict
+    - conda create -y -q -n test-env python=$TRAVIS_PYTHON_VERSION
     - source activate test-env
     - conda install -y numpy scipy pandas six pip
     - conda install -y nose seaborn dill statsmodels geopandas
